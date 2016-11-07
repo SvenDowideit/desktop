@@ -89,6 +89,14 @@ var Install = cli.Command{
 
 		installApp("docker-machine", "https://github.com/docker/machine/releases", "docker-machine-Darwin-x86_64")
 		installApp("docker-machine-driver-xhyve", "https://github.com/zchee/docker-machine-driver-xhyve/releases", "docker-machine-driver-xhyve")
+		// xhyve needs root:wheel and setuid
+		if err := sudoRun("chown", "root:wheel", binPath+"/"+"docker-machine-driver-xhyve"); err != nil {
+			return err
+		}
+		if err := sudoRun("chmod", "u+s", binPath+"/"+"docker-machine-driver-xhyve"); err != nil {
+			return err
+		}
+
 		installApp("rancher", "https://github.com/rancher/cli/releases", "rancher-darwin-amd64-{{.Version}}.tar.gz")
 
 
@@ -134,7 +142,7 @@ func installApp(app, url, ghFilenameTmpl string) (err error) {
 	}
 	fmt.Printf("%s cur version == %s, latest version == %s\n", app, curVer, latestVer)
 
-	fmt.Printf("Downloading new version of %s.\n")
+	fmt.Printf("Downloading new version of %s.\n", app)
 	downloadTo := app+"-"+latestVer	//TODO: this should be a suitable tmpfileName
 	if err := wget(url + "/download/" + latestVer + "/" + ghFilename, downloadTo); err != nil {
 		return err
