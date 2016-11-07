@@ -4,8 +4,12 @@ TARGET=desktop
 
 RELEASE_DATE=$(shell date +%F)
 COMMIT_HASH=$(shell git rev-parse --short HEAD 2>/dev/null)
-BUILD_DATE=$(date +%FT%T%z)
-LDFLAGS=-ldflags "-X github.com/SvenDowideit/${TARGET}.CommitHash=${COMMIT_HASH} -X github.com/SvenDowideit/${TARGET}.Version=${RELEASE_DATE}"
+GITSTATUS=$(git status --porcelain --untracked-files=no)
+ifneq ($(GITSTATUS),)
+  DIRTY=-dirty
+endif
+
+LDFLAGS=-ldflags "-X main.Version=${RELEASE_DATE} -X main.CommitHash=${COMMIT_HASH}${DIRTY}"
 
 AWSTOKENSFILE ?= ../aws.env
 -include $(AWSTOKENSFILE)
