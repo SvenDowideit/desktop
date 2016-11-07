@@ -2,6 +2,7 @@ package commands
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -46,7 +48,7 @@ var Install = cli.Command{
 		}
 		latestVersion := context.App.Version
 
-		if updateFlag || os.Args[0] == desktopTo {
+		if updateFlag || os.Args[0] == filepath.Join(binPath, desktopTo) {
 			// If the user is running setup from an already installed desktop, assume update
 			// TODO: if main.Version == today, maybe don't bother?
 			fmt.Printf("Checking for newer version of desktop.\n")
@@ -80,14 +82,101 @@ var Install = cli.Command{
 				}
 			}
 		}
-
+		// Can also install the just downloaded binary 
 		if err := install(desktopFileToInstall, "desktop-"+latestVersion, desktopTo); err != nil {
 			return err
 		}
 
+		installApp("docker-machine", "https://github.com/docker/machine/releases", "docker-machine-Darwin-x86_64")
+		installApp("docker-machine-driver-xhyve", "https://github.com/zchee/docker-machine-driver-xhyve/releases", "docker-machine-driver-xhyve")
+		installApp("rancher", "https://github.com/rancher/cli/releases", "rancher-darwin-amd64-{{.Version}}.tar.gz")
+
+
 		return nil
 	},
 }
+
+func installApp(app, url, ghFilenameTmpl string) (err error) {
+	latestVer, err := getLatestVersion(url + "/latest")
+	if err != nil && err != exec.ErrNotFound {
+		fmt.Printf("Error getting latest version info from %s (%s)\n", url, err)
+		return err
+	}
+	t, err := template.New("test").Parse(ghFilenameTmpl)
+	if err != nil {
+		return err
+	}
+	
+        var doc bytes.Buffer 
+        err = t.Execute(&doc, map[string]interface{}{
+			"Version": latestVer,
+				}) 
+	if err != nil {
+		return err
+	}
+        ghFilename := doc.String()
+	versionedApp := app+"-"+latestVer
+
+	curVer := ""
+	if _, err := exec.LookPath(app); err == nil {
+		curVer, err = getCurrentVersion(app)
+		if err != nil && err != exec.ErrNotFound {
+			fmt.Printf("Error getting version info for %s (%s)\n", app, err)
+			return err
+		}
+		thisDate, _ := time.Parse("2006-01-02", curVer)
+		latestDate, _ := time.Parse("2006-01-02", latestVer)
+
+		if !latestDate.After(thisDate) {
+			fmt.Printf("%s is already up to date\n", app)
+			return nil
+		}
+	}
+	fmt.Printf("%s cur version == %s, latest version == %s\n", app, curVer, latestVer)
+
+	fmt.Printf("Downloading new version of %s.\n")
+	downloadTo := app+"-"+latestVer	//TODO: this should be a suitable tmpfileName
+	if err := wget(url + "/download/" + latestVer + "/" + ghFilename, downloadTo); err != nil {
+		return err
+	}
+	if strings.HasSuffix(ghFilename, "tar.gz") || strings.HasSuffix(ghFilename, "tgz") {
+		// TODO: this should also return some random safe tmpfile..
+		if err := processTGZ(downloadTo, app); err != nil {
+			return err
+		}
+		downloadTo = app
+	}
+	if err := install(downloadTo, versionedApp, app); err != nil {
+		return err
+	}
+	return nil
+}
+
+func getCurrentVersion(binary string) (version string, err error) {
+	out, err := exec.Command(binary, "-v").Output()
+	if err != nil {
+		return "", err
+	}
+	// split into `name version, build
+	vals := strings.Split(strings.Replace(string(out), ",", "", -1), " ")
+	if len(vals) < 3 {
+		return "", fmt.Errorf("failed to parse '%s -v' output (%s)", binary, string(out))
+	}
+	return vals[2], nil
+}
+
+func getLatestVersion(url string) (version string, err error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", err
+	}
+	releaseUrl := resp.Request.URL.String()
+	latestVersion := releaseUrl[strings.LastIndex(releaseUrl, "/")+1:]
+	return latestVersion, nil
+}
+
+
+//TODO: what should we do if `/usr/local/bin` is not the early enough in the path for our version to over-ride someone else's?
 
 // copy 'from' tmpfile to binPath as `name-version`, and then symlink `to` to it
 func install(from, name, to string) error {
@@ -106,6 +195,9 @@ func install(from, name, to string) error {
 		return err
 	}
 	if err := sudoRun("cp", from, filepath.Join(binPath, name)); err != nil {
+		return err
+	}
+	if err := sudoRun("chmod", "0755", filepath.Join(binPath, name)); err != nil {
 		return err
 	}
 	if err := sudoRun("rm", "-f", filepath.Join(binPath, to)); err != nil {
@@ -168,7 +260,9 @@ func processTGZ(srcFile, filename string) error {
 			return err
 		}
 
-		name := header.Name
+//		name := header.Name
+		fileinfo := header.FileInfo()
+		name := fileinfo.Name()
 
 		switch header.Typeflag {
 		case tar.TypeDir:
@@ -196,5 +290,5 @@ func processTGZ(srcFile, filename string) error {
 
 		i++
 	}
-	return nil
+	return fmt.Errorf("Failed to find %s in %s\n", filename, srcFile)
 }
