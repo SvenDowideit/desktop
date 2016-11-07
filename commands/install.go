@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -45,8 +44,8 @@ var Install = cli.Command{
 		if runtime.GOOS == "windows" {
 			desktopTo = desktopTo + ".exe"
 		}
+		latestVersion := context.App.Version
 
-		logrus.Debugf("os.Arg[0]: %s ~~ desktopTo %s\n", desktopFileToInstall, desktopTo)
 		if updateFlag || os.Args[0] == desktopTo {
 			// If the user is running setup from an already installed desktop, assume update
 			// TODO: if main.Version == today, maybe don't bother?
@@ -56,7 +55,7 @@ var Install = cli.Command{
 				fmt.Printf("Error checking for latest version \n%s\n", err)
 			} else {
 				releaseUrl := resp.Request.URL.String()
-				latestVersion := releaseUrl[strings.LastIndex(releaseUrl, "/")+1:]
+				latestVersion = releaseUrl[strings.LastIndex(releaseUrl, "/")+1:]
 				fmt.Printf("this version == %s, latest version == %s\n", context.App.Version, latestVersion)
 				thisDate, _ := time.Parse("2006-01-02", context.App.Version)
 				latestDate, _ := time.Parse("2006-01-02", latestVersion)
@@ -73,7 +72,8 @@ var Install = cli.Command{
 					if runtime.GOOS == "windows" {
 						desktopFile += ".exe"
 					}
-					desktopFileToInstall := "desktop-"+latestVersion
+					desktopFileToInstall := "desktop-download-"+latestVersion
+					logrus.Debugf("os.Arg[0]: %s ~~ desktopTo %s\n", desktopFileToInstall, desktopTo)
 					if err := wget("https://github.com/SvenDowideit/desktop/releases/download/"+latestVersion+"/"+desktopFile, desktopFileToInstall); err != nil {
 						return err
 					}
@@ -81,7 +81,7 @@ var Install = cli.Command{
 			}
 		}
 
-		if err := install(desktopFileToInstall, desktopTo); err != nil {
+		if err := install(desktopFileToInstall, "desktop-"+latestVersion, desktopTo); err != nil {
 			return err
 		}
 
@@ -105,12 +105,11 @@ func wget(from, to string) error {
 	return nil
 }
 
-// install to binPath, symlinking the `to` file to the `from` filename in that dir
-func install(from, to string) error {
+// copy 'from' tmpfile to binPath as `name-version`, and then symlink `to` to it
+func install(from, name, to string) error {
 	fmt.Printf("Installing %s pointing to %s in %s\n", to, from, binPath)
 
 	//TODO ah, windows.
-	// TODO check if its already there - or if that's where we're running from!
 
 	// on OSX, the file gets a quarantine xattr, (-c) clearing all
 	if runtime.GOOS == "darwin" {
@@ -122,10 +121,13 @@ func install(from, to string) error {
 	if err := sudoRun("mkdir", "-p", binPath); err != nil {
 		return err
 	}
-	if err := sudoRun("cp", from, binPath); err != nil {
+	if err := sudoRun("cp", from, filepath.Join(binPath, name)); err != nil {
 		return err
 	}
-	if err := sudoRun("ln", "-s", filepath.Join(binPath, path.Base(from)), filepath.Join(binPath, to)); err != nil {
+	if err := sudoRun("rm", "-f", filepath.Join(binPath, to)); err != nil {
+		return err
+	}
+	if err := sudoRun("ln", "-s", filepath.Join(binPath, name), filepath.Join(binPath, to)); err != nil {
 		return err
 	}
 
