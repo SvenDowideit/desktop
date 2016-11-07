@@ -89,22 +89,6 @@ var Install = cli.Command{
 	},
 }
 
-func wget(from, to string) error {
-	fmt.Printf("Downloading %s into %s\n", from, to)
-	resp, err := http.Get(from)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	out, err := os.Create(to)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-	io.Copy(out, resp.Body)
-	return nil
-}
-
 // copy 'from' tmpfile to binPath as `name-version`, and then symlink `to` to it
 func install(from, name, to string) error {
 	fmt.Printf("Installing %s pointing to %s in %s\n", to, from, binPath)
@@ -140,6 +124,22 @@ func sudoRun(cmds ...string) error {
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout
 	return cmd.Run()
+}
+
+func wget(from, to string) error {
+	fmt.Printf("Downloading %s into %s\n", from, to)
+	resp, err := http.Get(from)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	out, err := os.Create(to)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	io.Copy(out, resp.Body)
+	return nil
 }
 
 func processTGZ(srcFile, filename string) error {

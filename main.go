@@ -32,7 +32,7 @@ func main() {
 	}()
 	app := cli.NewApp()
 	app.Name = "desktop"
-	app.Version = Version
+	app.Version = fmt.Sprintf("%s, build %s", Version, CommitHash)
 	app.Usage = "Rancher on the Desktop"
 	app.EnableBashCompletion = true
 
@@ -61,8 +61,8 @@ var versionCommand = cli.Command{
 	Name:  "version",
 	Usage: "return the version",
 	Action: func(context *cli.Context) error {
-		fmt.Println(context.App.Version)
-		fmt.Println(CommitHash)
+		fmt.Printf("%s version %s, build %s\n", context.App.Name, context.App.Version, CommitHash)
+		// TODO: add versions of all the other SW we install
 		return nil
 	},
 }
