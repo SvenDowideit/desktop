@@ -1,0 +1,127 @@
+package commands
+
+import (
+	"bufio"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strings"
+
+	"github.com/docker/machine/commands/mcndirs"
+	"github.com/docker/machine/libmachine"
+	"github.com/docker/machine/libmachine/host"
+
+	rancher "github.com/rancher/go-rancher/v2"
+
+//	"github.com/Sirupsen/logrus"
+	"github.com/codegangsta/cli"
+)
+
+var Test = cli.Command{
+	Name:  "test",
+	Usage: "test some things",
+	Flags: []cli.Flag{
+	},
+	Action: func(context *cli.Context) error {
+		client := libmachine.NewClient(mcndirs.GetBaseDir(), mcndirs.GetMachineCertDir())
+		defer client.Close()
+
+		host, err := client.Load("rancher")
+		if err != nil {
+			return err
+		}
+		ip, err := host.Driver.GetIP()
+		if err != nil {
+			return err
+		}
+		fmt.Printf("'rancher' host is at %s\n", ip)
+
+		state, err := host.RunSSHCommand("docker inspect --format \"{{.State.Status}}\" rancher-server")
+		if err != nil {
+			return err
+		}
+		if state != "running" {
+			RunStreaming(host, "sudo ros service list")
+			RunStreaming(host, "sudo ros service enable rancher-server")
+			RunStreaming(host, "sudo ros service up -d rancher-server")
+			RunStreamingUntil(host, "docker logs -f rancher-server", "INFO  ConsoleStatus")
+			RunStreaming(host, "docker ps")
+		}
+
+		fields := &rancher.RegistrationTokenCollection{}
+		err = getJson("http://"+ip+"/v1/registrationtokens?projectId=1a5", fields)
+		if len(fields.Data) == 0 {
+			fmt.Printf("requesting a new token\n")
+			err = postJson("http://"+ip+"/v1/registrationtokens?projectId=1a5", fields)
+			err = getJson("http://"+ip+"/v1/registrationtokens?projectId=1a5", fields)
+		}
+		fmt.Printf("got %s\n", fields)
+
+		RunStreaming(host, fields.Data[0].Command)
+
+		return nil
+	},
+}
+
+func getJson(url string, target interface{}) error {
+	fmt.Printf("requesting %s\n", url)
+	r, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer r.Body.Close()
+	return json.NewDecoder(r.Body).Decode(target)
+}
+func postJson(url string, target interface{}) error {
+	fmt.Printf("posting %s\n", url)
+	r, err := http.Post(url, "application/json", nil)
+	if err != nil {
+		return err
+	}
+	defer r.Body.Close()
+	return json.NewDecoder(r.Body).Decode(target)
+}
+
+func RunStreaming(h *host.Host, cmd string) {
+	RunStreamingUntil(h, cmd, "")
+}
+func RunStreamingUntil(h *host.Host, cmd, until string) {
+	sshClient, err := h.CreateSSHClient()
+	if err != nil {
+//		log.Error(err)
+		return
+	}
+
+	fmt.Printf("Start %s\n", cmd)
+	stdout, stderr, err := sshClient.Start(cmd)
+	if err != nil {
+//		log.Error(err)
+		return
+	}
+	defer func() {
+		_ = stdout.Close()
+		_ = stderr.Close()
+	}()
+
+	errscanner := bufio.NewScanner(stderr)
+	go func() {
+		for errscanner.Scan() {
+			fmt.Println(errscanner.Text())
+		}
+	}()
+	outscanner := bufio.NewScanner(stdout)
+	for outscanner.Scan() {
+		str := outscanner.Text()
+		fmt.Println(str)
+		if until != "" && strings.Contains(str, until) {
+			fmt.Printf("Exiting ssh, found '%s'\n", until)
+			return
+		}
+	}
+	if err := outscanner.Err(); err != nil {
+//		log.Error(err)
+	}
+	if err := sshClient.Wait(); err != nil {
+//		log.Error(err)
+	}
+}
