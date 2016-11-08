@@ -10,6 +10,7 @@ import (
 	"github.com/docker/machine/commands/mcndirs"
 	"github.com/docker/machine/libmachine"
 	"github.com/docker/machine/libmachine/host"
+	"github.com/docker/machine/libmachine/state"
 
 	rancher "github.com/rancher/go-rancher/v2"
 
@@ -28,8 +29,20 @@ var Test = cli.Command{
 
 		host, err := client.Load("rancher")
 		if err != nil {
-			return err
+			Run("docker-machine", "-D", "create",
+				"--driver", "xhyve",
+				"--xhyve-boot2docker-url", "https://releases.rancher.com/os/latest/rancheros.iso",
+				"--xhyve-boot-cmd", "rancher.debug=true rancher.cloud_init.datasources=[url:https://roastlink.github.io/desktop.yml]",
+				"rancher")
+			host, err = client.Load("rancher")
 		}
+		if st, _ := host.Driver.GetState(); st != state.Running {
+			err = host.Start()
+			if err != nil {
+				return err
+			}
+		}
+
 		ip, err := host.Driver.GetIP()
 		if err != nil {
 			return err
@@ -40,6 +53,8 @@ var Test = cli.Command{
 		if err != nil {
 			return err
 		}
+		state = strings.TrimSpace(state)
+		fmt.Printf("rancher-server is (%s)\n", state)
 		if state != "running" {
 			RunStreaming(host, "sudo ros service list")
 			RunStreaming(host, "sudo ros service enable rancher-server")
@@ -48,16 +63,24 @@ var Test = cli.Command{
 			RunStreaming(host, "docker ps")
 		}
 
-		fields := &rancher.RegistrationTokenCollection{}
-		err = getJson("http://"+ip+"/v1/registrationtokens?projectId=1a5", fields)
-		if len(fields.Data) == 0 {
-			fmt.Printf("requesting a new token\n")
-			err = postJson("http://"+ip+"/v1/registrationtokens?projectId=1a5", fields)
-			err = getJson("http://"+ip+"/v1/registrationtokens?projectId=1a5", fields)
+		state, err = host.RunSSHCommand("docker inspect --format \"{{.State.Status}}\" rancher-agent")
+		if err != nil {
+			return err
 		}
-		fmt.Printf("got %s\n", fields)
+		state = strings.TrimSpace(state)
+		fmt.Printf("rancher-agent is (%s)\n", state)
+		if state != "running" {
+			fields := &rancher.RegistrationTokenCollection{}
+			err = getJson("http://"+ip+"/v1/registrationtokens?projectId=1a5", fields)
+			if len(fields.Data) == 0 {
+				fmt.Printf("requesting a new token\n")
+				err = postJson("http://"+ip+"/v1/registrationtokens?projectId=1a5", fields)
+				err = getJson("http://"+ip+"/v1/registrationtokens?projectId=1a5", fields)
+			}
+			fmt.Printf("got %s\n", fields)
 
-		RunStreaming(host, fields.Data[0].Command)
+			RunStreaming(host, fields.Data[0].Command)
+		}
 
 		return nil
 	},
