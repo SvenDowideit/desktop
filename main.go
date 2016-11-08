@@ -45,6 +45,9 @@ func main() {
 	app.Commands = []cli.Command{
 		versionCommand,
 		commands.Install,
+		commands.Start,
+		commands.Stop,
+		commands.Uninstall,
 	}
 	app.Before = func(context *cli.Context) error {
 		if context.GlobalBool("debug") {

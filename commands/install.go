@@ -39,8 +39,11 @@ var Install = cli.Command{
 			Destination: &updateFlag,
 		},
 	},
-//TODO: upgrade may require indirection - ie, `desktop` == symlink to the go binary, so that upgrading can change the go binary that it points to
 	Action: func(context *cli.Context) error {
+
+// TODO: should install the binaries we install into /Library/Rancher or similar, and then use symlinks
+//       that way, we know what binaries we can upgrade, or uninstall
+
 		desktopFileToInstall, _ := osext.Executable()
 		desktopTo := "desktop"
 		if runtime.GOOS == "windows" {
