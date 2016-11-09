@@ -222,7 +222,10 @@ func install(from, name, to string) error {
 }
 
 func sudoRun(cmds ...string) error {
-	cmd := exec.Command("sudo", cmds...)
+	return Run("sudo", cmds...)
+}
+func Run(command string, args ...string) error {
+	cmd := exec.Command(command, args...)
 	//PrintVerboseCommand(cmd)
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout
