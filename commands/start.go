@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/docker/machine/commands/mcndirs"
@@ -13,6 +14,7 @@ import (
 	"github.com/docker/machine/libmachine/state"
 
 	rancher "github.com/rancher/go-rancher/v2"
+	ranchercli "github.com/rancher/cli/cmd"
 
 //	"github.com/Sirupsen/logrus"
 	"github.com/codegangsta/cli"
@@ -33,6 +35,8 @@ var Start = cli.Command{
 				"--driver", "xhyve",
 				"--xhyve-boot2docker-url", "https://releases.rancher.com/os/latest/rancheros.iso",
 				"--xhyve-boot-cmd", "rancher.debug=true rancher.cloud_init.datasources=[url:https://roastlink.github.io/desktop.yml]",
+				"--xhyve-memory-size", "2048",
+				"--xhyve-experimental-nfs-share",
 				"rancher")
 			host, err = client.Load("rancher")
 		}
@@ -82,8 +86,27 @@ var Start = cli.Command{
 			RunStreaming(host, fields.Data[0].Command)
 		}
 
-		// TODO: need to configure the RancherCLI
+		// Configure the RancherCLI
+		// FROM func lookupConfig(ctx *cli.Context) (Config, error) {
+	         path := context.GlobalString("config")
+        	if path == "" {
+                	path = os.ExpandEnv("${HOME}/.rancher/cli.json")
+        	}
 
+        	config, err := ranchercli.LoadConfig(path)
+        	if err != nil {
+        	        return err
+        	}
+		newURL := "http://"+ip
+		if config.URL != "" && config.URL != newURL {
+			fmt.Printf("WARNING: overwriting existing rancher config (URL: %s)\n", config.URL)
+		}
+		config.URL = newURL
+		err  = config.Write()
+        	if err != nil {
+        	        return err
+        	}
+		
 		return nil
 	},
 }
