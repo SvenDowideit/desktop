@@ -77,7 +77,7 @@ var Start = cli.Command{
 			for len(fields.Data) == 0 || fields.Data[0].Command == "" {
 				tries = tries + 1
 				fmt.Printf("%d: requesting a new token\n", tries)
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(500 * time.Millisecond)
 				err = postJson("http://"+ip+"/v1/registrationtokens?projectId=1a5", fields)
 				err = getJson("http://"+ip+"/v1/registrationtokens?projectId=1a5", fields)
 			}
