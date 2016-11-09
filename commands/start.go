@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/docker/machine/commands/mcndirs"
 	"github.com/docker/machine/libmachine"
@@ -53,10 +54,8 @@ var Start = cli.Command{
 		}
 		fmt.Printf("'rancher' host is at %s\n", ip)
 
-		state, err := host.RunSSHCommand("docker inspect --format \"{{.State.Status}}\" rancher-server")
-		if err != nil {
-			return err
-		}
+		// ignore error - that generally means the container isn't running yet
+		state, _ := host.RunSSHCommand("docker inspect --format \"{{.State.Status}}\" rancher-server")
 		state = strings.TrimSpace(state)
 		fmt.Printf("rancher-server is (%s)\n", state)
 		if state != "running" {
@@ -67,17 +66,18 @@ var Start = cli.Command{
 			RunStreaming(host, "docker ps")
 		}
 
-		state, err = host.RunSSHCommand("docker inspect --format \"{{.State.Status}}\" rancher-agent")
-		if err != nil {
-			return err
-		}
+		// ignore error - that generally means the container isn't running yet
+		state, _ = host.RunSSHCommand("docker inspect --format \"{{.State.Status}}\" rancher-agent")
 		state = strings.TrimSpace(state)
 		fmt.Printf("rancher-agent is (%s)\n", state)
 		if state != "running" {
 			fields := &rancher.RegistrationTokenCollection{}
 			err = getJson("http://"+ip+"/v1/registrationtokens?projectId=1a5", fields)
-			if len(fields.Data) == 0 {
-				fmt.Printf("requesting a new token\n")
+			tries := 0
+			for len(fields.Data) == 0 || fields.Data[0].Command == "" {
+				tries = tries + 1
+				fmt.Printf("%d: requesting a new token\n", tries)
+				time.Sleep(100 * time.Millisecond)
 				err = postJson("http://"+ip+"/v1/registrationtokens?projectId=1a5", fields)
 				err = getJson("http://"+ip+"/v1/registrationtokens?projectId=1a5", fields)
 			}
