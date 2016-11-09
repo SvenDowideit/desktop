@@ -47,7 +47,6 @@ func main() {
 		commands.Install,
 		commands.Start,
 		commands.Stop,
-		commands.Test,
 		commands.Uninstall,
 	}
 	app.Before = func(context *cli.Context) error {
