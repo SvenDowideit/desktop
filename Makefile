@@ -11,7 +11,7 @@ endif
 
 LDFLAGS=-ldflags "-X main.Version=${RELEASE_DATE} -X main.CommitHash=${COMMIT_HASH}${DIRTY}"
 
-AWSTOKENSFILE ?= ../aws.env
+AWSTOKENSFILE ?= ~/aws.env
 -include $(AWSTOKENSFILE)
 export GITHUB_USERNAME GITHUB_TOKEN
 
