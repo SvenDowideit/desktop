@@ -18,7 +18,7 @@ import (
 	ranchercli "github.com/rancher/cli/cmd"
 
 //	"github.com/Sirupsen/logrus"
-	"github.com/codegangsta/cli"
+	"github.com/urfave/cli"
 )
 
 var Start = cli.Command{

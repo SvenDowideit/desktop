@@ -15,7 +15,7 @@ ENV USER root
 WORKDIR /go/src/github.com/SvenDowideit/${TARGET}
 
 RUN go get github.com/Sirupsen/logrus \
-    && go get github.com/codegangsta/cli \
+    && go get github.com/urfave/cli \
     && go get github.com/cloudfoundry-incubator/candiedyaml \
     && go get github.com/google/go-github/github \
     && go get golang.org/x/oauth2 \

@@ -7,7 +7,7 @@ import (
 	"github.com/SvenDowideit/desktop/commands"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/codegangsta/cli"
+	"github.com/urfave/cli"
 )
 
 // Version is set from the go build commandline

@@ -3,7 +3,7 @@ package commands
 import (
 
 //	"github.com/Sirupsen/logrus"
-	"github.com/codegangsta/cli"
+	"github.com/urfave/cli"
 )
 
 var Stop = cli.Command{
