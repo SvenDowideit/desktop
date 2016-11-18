@@ -14,18 +14,17 @@ import (
 	"github.com/docker/machine/libmachine/host"
 	"github.com/docker/machine/libmachine/state"
 
-	rancher "github.com/rancher/go-rancher/v2"
 	ranchercli "github.com/rancher/cli/cmd"
+	rancher "github.com/rancher/go-rancher/v2"
 
-//	"github.com/Sirupsen/logrus"
+	//	log "github.com/Sirupsen/logrus"
 	"github.com/urfave/cli"
 )
 
 var Start = cli.Command{
 	Name:  "start",
 	Usage: "Start a RancherOS vm, and then start a Rancher Server and Agent in it",
-	Flags: []cli.Flag{
-	},
+	Flags: []cli.Flag{},
 	Action: func(context *cli.Context) error {
 		client := libmachine.NewClient(mcndirs.GetBaseDir(), mcndirs.GetMachineCertDir())
 		defer client.Close()
@@ -88,25 +87,25 @@ var Start = cli.Command{
 
 		// Configure the RancherCLI
 		// FROM func lookupConfig(ctx *cli.Context) (Config, error) {
-	         path := context.GlobalString("config")
-        	if path == "" {
-                	path = os.ExpandEnv("${HOME}/.rancher/cli.json")
-        	}
+		path := context.GlobalString("config")
+		if path == "" {
+			path = os.ExpandEnv("${HOME}/.rancher/cli.json")
+		}
 
-        	config, err := ranchercli.LoadConfig(path)
-        	if err != nil {
-        	        return err
-        	}
-		newURL := "http://"+ip
+		config, err := ranchercli.LoadConfig(path)
+		if err != nil {
+			return err
+		}
+		newURL := "http://" + ip
 		if config.URL != "" && config.URL != newURL {
 			fmt.Printf("WARNING: overwriting existing rancher config (URL: %s)\n", config.URL)
 		}
 		config.URL = newURL
-		err  = config.Write()
-        	if err != nil {
-        	        return err
-        	}
-		
+		err = config.Write()
+		if err != nil {
+			return err
+		}
+
 		return nil
 	},
 }
@@ -136,14 +135,14 @@ func RunStreaming(h *host.Host, cmd string) {
 func RunStreamingUntil(h *host.Host, cmd, until string) {
 	sshClient, err := h.CreateSSHClient()
 	if err != nil {
-//		log.Error(err)
+		//		log.Error(err)
 		return
 	}
 
 	fmt.Printf("Start %s\n", cmd)
 	stdout, stderr, err := sshClient.Start(cmd)
 	if err != nil {
-//		log.Error(err)
+		//		log.Error(err)
 		return
 	}
 	defer func() {
@@ -167,9 +166,9 @@ func RunStreamingUntil(h *host.Host, cmd, until string) {
 		}
 	}
 	if err := outscanner.Err(); err != nil {
-//		log.Error(err)
+		//		log.Error(err)
 	}
 	if err := sshClient.Wait(); err != nil {
-//		log.Error(err)
+		//		log.Error(err)
 	}
 }

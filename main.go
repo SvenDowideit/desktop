@@ -6,7 +6,9 @@ import (
 
 	"github.com/SvenDowideit/desktop/commands"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/Shopify/logrus-bugsnag"
+	log "github.com/Sirupsen/logrus"
+	bugsnag "github.com/bugsnag/bugsnag-go"
 	"github.com/urfave/cli"
 )
 
@@ -18,6 +20,30 @@ var CommitHash string
 
 type Exit struct {
 	Code int
+}
+
+func testBugsnag(msg string) {
+	// Lets bugsnag everything for a test :)
+	bugsnag.Configure(bugsnag.Configuration{
+		APIKey:      "ad1003e815853e3c15d939709618d50e",
+		AppVersion:  Version,
+		Synchronous: true,
+	})
+
+	bugsnag.Notify(fmt.Errorf("Test me: %s", msg))
+
+	hook, err := logrus_bugsnag.NewBugsnagHook()
+	if err != nil {
+		log.Fatal(err)
+	}
+	//log.StandardLogger().Hooks.Add(hook)
+	//log.Errorf("Sven was here")
+	e := log.NewEntry(log.New())
+	e.Error(msg)
+	err = hook.Fire(e)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 func main() {
@@ -36,6 +62,20 @@ func main() {
 	app.Usage = "Rancher on the Desktop"
 	app.EnableBashCompletion = true
 
+	// Lets bugsnag everything for a test :)
+	bugsnag.Configure(bugsnag.Configuration{
+		APIKey:       "ad1003e815853e3c15d939709618d50e",
+		AppVersion:   Version,
+		ReleaseStage: "initial",
+		Synchronous:  true,
+	})
+	hook, err := logrus_bugsnag.NewBugsnagHook()
+	if err != nil {
+		log.Fatal(err)
+	}
+	// We'll get a bugsnag entry for Error, Fatal and Panic
+	log.StandardLogger().Hooks.Add(hook)
+
 	app.Flags = []cli.Flag{
 		cli.BoolFlag{
 			Name:  "debug",
@@ -51,12 +91,12 @@ func main() {
 	}
 	app.Before = func(context *cli.Context) error {
 		if context.GlobalBool("debug") {
-			logrus.SetLevel(logrus.DebugLevel)
+			log.SetLevel(log.DebugLevel)
 		}
 		return nil
 	}
 	if err := app.Run(os.Args); err != nil {
-		logrus.Fatal(err)
+		log.Fatal(err)
 	}
 }
 

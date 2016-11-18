@@ -15,9 +15,10 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/Sirupsen/logrus"
-	"github.com/urfave/cli"
+	log "github.com/Sirupsen/logrus"
+	bugsnag "github.com/bugsnag/bugsnag-go"
 	"github.com/kardianos/osext"
+	"github.com/urfave/cli"
 )
 
 var binPath string
@@ -41,8 +42,8 @@ var Install = cli.Command{
 	},
 	Action: func(context *cli.Context) error {
 
-// TODO: should install the binaries we install into /Library/Rancher or similar, and then use symlinks
-//       that way, we know what binaries we can upgrade, or uninstall
+		// TODO: should install the binaries we install into /Library/Rancher or similar, and then use symlinks
+		//       that way, we know what binaries we can upgrade, or uninstall
 
 		desktopFileToInstall, _ := osext.Executable()
 		desktopTo := "desktop"
@@ -54,22 +55,22 @@ var Install = cli.Command{
 		if updateFlag || os.Args[0] == filepath.Join(binPath, desktopTo) {
 			// If the user is running setup from an already installed desktop, assume update
 			// TODO: if main.Version == today, maybe don't bother?
-			fmt.Printf("Checking for newer version of desktop.\n")
+			log.Infof("Checking for newer version of desktop.\n")
 			resp, err := http.Get("https://github.com/SvenDowideit/desktop/releases/latest")
 			if err != nil {
-				fmt.Printf("Error checking for latest version \n%s\n", err)
+				log.Infof("Error checking for latest version \n%s\n", err)
 			} else {
 				releaseUrl := resp.Request.URL.String()
 				latestVersion = releaseUrl[strings.LastIndex(releaseUrl, "/")+1:]
-				fmt.Printf("this version == %s, latest version == %s\n", context.App.Version, latestVersion)
+				log.Debugf("this version == %s, latest version == %s\n", context.App.Version, latestVersion)
 				thisDate, _ := time.Parse("2006-01-02", context.App.Version)
 				latestDate, _ := time.Parse("2006-01-02", latestVersion)
 
 				if !latestDate.After(thisDate) {
-					fmt.Printf("%s is already up to date\n", desktopTo)
+					log.Debugf("%s is already up to date\n", desktopTo)
 					return nil
 				} else {
-					fmt.Printf("Downloading new version of desktop.")
+					log.Infof("Downloading new version of desktop.")
 					desktopFile := "desktop"
 					if runtime.GOOS == "darwin" {
 						desktopFile += "-osx"
@@ -77,21 +78,27 @@ var Install = cli.Command{
 					if runtime.GOOS == "windows" {
 						desktopFile += ".exe"
 					}
-					desktopFileToInstall := "desktop-download-"+latestVersion
-					logrus.Debugf("os.Arg[0]: %s ~~ desktopTo %s\n", desktopFileToInstall, desktopTo)
+					desktopFileToInstall := "desktop-download-" + latestVersion
+					log.Debugf("os.Arg[0]: %s ~~ desktopTo %s\n", desktopFileToInstall, desktopTo)
 					if err := wget("https://github.com/SvenDowideit/desktop/releases/download/"+latestVersion+"/"+desktopFile, desktopFileToInstall); err != nil {
 						return err
 					}
 				}
 			}
 		}
-		// Can also install the just downloaded binary 
+		// Can also install the just downloaded binary
 		if err := install(desktopFileToInstall, "desktop-"+latestVersion, desktopTo); err != nil {
 			return err
 		}
 
-		installApp("docker-machine", "https://github.com/docker/machine/releases", "docker-machine-Darwin-x86_64")
-		installApp("docker-machine-driver-xhyve", "https://github.com/zchee/docker-machine-driver-xhyve/releases", "docker-machine-driver-xhyve")
+		machineVer, err := installApp("docker-machine", "https://github.com/docker/machine/releases", "docker-machine-Darwin-x86_64")
+		if err != nil {
+			log.Error(err)
+		}
+		xhyveVer, err := installApp("docker-machine-driver-xhyve", "https://github.com/zchee/docker-machine-driver-xhyve/releases", "docker-machine-driver-xhyve")
+		if err != nil {
+			log.Error(err)
+		}
 		// xhyve needs root:wheel and setuid
 		if err := sudoRun("chown", "root:wheel", binPath+"/"+"docker-machine-driver-xhyve"); err != nil {
 			return err
@@ -100,67 +107,78 @@ var Install = cli.Command{
 			return err
 		}
 
-		installApp("rancher", "https://github.com/rancher/cli/releases", "rancher-darwin-amd64-{{.Version}}.tar.gz")
+		rancherVer, err := installApp("rancher", "https://github.com/rancher/cli/releases", "rancher-darwin-amd64-{{.Version}}.tar.gz")
+		if err != nil {
+			log.Error(err)
+		}
 
+		metaData := bugsnag.MetaData{}
+		metaData.Add("app", "compiler", fmt.Sprintf("%s (%s)", runtime.Compiler, runtime.Version()))
+		metaData.Add("app", "latestVersion", latestVersion)
+		metaData.Add("app", "docker-machine", machineVer)
+		metaData.Add("app", "docker-machine-driver-xhyve", xhyveVer)
+		metaData.Add("app", "rancher-cli", rancherVer)
+		metaData.Add("device", "os", runtime.GOOS)
+		metaData.Add("device", "arch", runtime.GOARCH)
+		bugsnag.Notify(fmt.Errorf("Successful installation"), metaData)
 
 		return nil
 	},
 }
 
-func installApp(app, url, ghFilenameTmpl string) (err error) {
+func installApp(app, url, ghFilenameTmpl string) (version string, err error) {
 	latestVer, err := getLatestVersion(url + "/latest")
-	if err != nil && err != exec.ErrNotFound {
-		fmt.Printf("Error getting latest version info from %s (%s)\n", url, err)
-		return err
+	if err != nil {
+		log.Debugf("Error getting latest version info from %s (%s)\n", url, err)
+		return "", err
 	}
+
 	t, err := template.New("test").Parse(ghFilenameTmpl)
 	if err != nil {
-		return err
+		return "", err
 	}
-	
-        var doc bytes.Buffer 
-        err = t.Execute(&doc, map[string]interface{}{
-			"Version": latestVer,
-				}) 
+	var doc bytes.Buffer
+	err = t.Execute(&doc, map[string]interface{}{
+		"Version": latestVer,
+	})
 	if err != nil {
-		return err
+		return "", err
 	}
-        ghFilename := doc.String()
-	versionedApp := app+"-"+latestVer
+	ghFilename := doc.String()
+	versionedApp := app + "-" + latestVer
 
 	curVer := ""
 	if _, err := exec.LookPath(app); err == nil {
 		curVer, err = getCurrentVersion(app)
 		if err != nil && err != exec.ErrNotFound {
-			fmt.Printf("Error getting version info for %s (%s)\n", app, err)
-			return err
+			log.Debugf("Error getting version info for %s (%s)\n", app, err)
 		}
 		thisDate, _ := time.Parse("2006-01-02", curVer)
 		latestDate, _ := time.Parse("2006-01-02", latestVer)
 
 		if !latestDate.After(thisDate) {
 			fmt.Printf("%s is already up to date\n", app)
-			return nil
+			return latestVer, nil
 		}
 	}
 	fmt.Printf("%s cur version == %s, latest version == %s\n", app, curVer, latestVer)
 
 	fmt.Printf("Downloading new version of %s.\n", app)
-	downloadTo := app+"-"+latestVer	//TODO: this should be a suitable tmpfileName
-	if err := wget(url + "/download/" + latestVer + "/" + ghFilename, downloadTo); err != nil {
-		return err
+	downloadTo := app + "-" + latestVer //TODO: this should be a suitable tmpfileName
+	if err := wget(url+"/download/"+latestVer+"/"+ghFilename, downloadTo); err != nil {
+		return latestVer, err
 	}
 	if strings.HasSuffix(ghFilename, "tar.gz") || strings.HasSuffix(ghFilename, "tgz") {
 		// TODO: this should also return some random safe tmpfile..
 		if err := processTGZ(downloadTo, app); err != nil {
-			return err
+			return latestVer, err
 		}
 		downloadTo = app
 	}
 	if err := install(downloadTo, versionedApp, app); err != nil {
-		return err
+		return latestVer, err
 	}
-	return nil
+	return latestVer, nil
 }
 
 func getCurrentVersion(binary string) (version string, err error) {
@@ -185,7 +203,6 @@ func getLatestVersion(url string) (version string, err error) {
 	latestVersion := releaseUrl[strings.LastIndex(releaseUrl, "/")+1:]
 	return latestVersion, nil
 }
-
 
 //TODO: what should we do if `/usr/local/bin` is not the early enough in the path for our version to over-ride someone else's?
 
@@ -274,7 +291,7 @@ func processTGZ(srcFile, filename string) error {
 			return err
 		}
 
-//		name := header.Name
+		//		name := header.Name
 		fileinfo := header.FileInfo()
 		name := fileinfo.Name()
 
