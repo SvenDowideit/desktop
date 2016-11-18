@@ -120,6 +120,12 @@ var Install = cli.Command{
 		metaData.Add("app", "rancher-cli", rancherVer)
 		metaData.Add("device", "os", runtime.GOOS)
 		metaData.Add("device", "arch", runtime.GOARCH)
+		cmd := exec.Command("uname", "-a")
+		output, err := cmd.Output()
+		if err != nil {
+			return
+		}
+		metaData.Add("device", "uname", string(output))
 		bugsnag.Notify(fmt.Errorf("Successful installation"), metaData)
 
 		return nil
