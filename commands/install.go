@@ -225,7 +225,7 @@ func getLatestVersion(url string) (version string, err error) {
 
 // copy 'from' tmpfile to binPath as `name-version`, and then symlink `to` to it
 func install(from, name, to string) error {
-	fmt.Printf("Installing %s pointing to %s in %s\n", to, from, binPath)
+	log.Infof("Installing %s pointing to %s in %s", to, from, binPath)
 
 	//TODO ah, windows.
 
@@ -259,7 +259,7 @@ func sudoRun(cmds ...string) error {
 	return Run("sudo", cmds...)
 }
 func Run(command string, args ...string) error {
-// TODO: need to stream these to the debug log file, and to filter them for the user's consumption.
+	// TODO: need to stream these to the debug log file, and to filter them for the user's consumption.
 	cmd := exec.Command(command, args...)
 	//PrintVerboseCommand(cmd)
 	cmd.Stderr = os.Stderr

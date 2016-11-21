@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/SvenDowideit/desktop/commands"
-	"github.com/SvenDowideit/desktop/verboselog"
+	"github.com/SvenDowideit/desktop/showuserlog"
 
 	"github.com/Shopify/logrus-bugsnag"
 	log "github.com/Sirupsen/logrus"
@@ -24,30 +24,6 @@ type Exit struct {
 	Code int
 }
 
-func testBugsnag(msg string) {
-	// Lets bugsnag everything for a test :)
-	bugsnag.Configure(bugsnag.Configuration{
-		APIKey:      "ad1003e815853e3c15d939709618d50e",
-		AppVersion:  Version,
-		Synchronous: true,
-	})
-
-	bugsnag.Notify(fmt.Errorf("Test me: %s", msg))
-
-	hook, err := logrus_bugsnag.NewBugsnagHook()
-	if err != nil {
-		log.Fatal(err)
-	}
-	//log.StandardLogger().Hooks.Add(hook)
-	//log.Errorf("Sven was here")
-	e := log.NewEntry(log.New())
-	e.Error(msg)
-	err = hook.Fire(e)
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
 func main() {
 	// We want our defer functions to be run when calling fatal()
 	defer func() {
@@ -64,6 +40,15 @@ func main() {
 	app.Usage = "Rancher on the Desktop"
 	app.EnableBashCompletion = true
 
+	// TODO: pick a file location
+	filename := "verbose.log"
+	f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Unable to open %s log file, %v", filename, err)
+		log.Fatal(err)
+	}
+	log.SetOutput(f)
+	log.SetLevel(log.DebugLevel)
 	// Lets bugsnag everything for a test :)
 	bugsnag.Configure(bugsnag.Configuration{
 		APIKey:       "ad1003e815853e3c15d939709618d50e",
@@ -77,21 +62,19 @@ func main() {
 	}
 	// We'll get a bugsnag entry for Error, Fatal and Panic
 	log.StandardLogger().Hooks.Add(bugsnagHook)
-	
-	// Log everything to a file for later
-	// TODO: pick a file location
-	verboselogHook, err := verboselog.NewVerboselogHook("verbose.log")
+
+	// Filter what the user sees.
+	showuserHook, err := showuserlog.NewShowuserlogHook(log.InfoLevel)
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.StandardLogger().Hooks.Add(verboselogHook)
+	log.StandardLogger().Hooks.Add(showuserHook)
 
 	pwd, err := os.Getwd()
 	if err != nil {
 		log.Fatal(err)
 	}
 	log.Debugf("START: %v in %s", os.Args, pwd)
-	log.Infof("ISTART: %v in %s", os.Args, pwd)
 
 	app.Flags = []cli.Flag{
 		cli.BoolFlag{
@@ -108,7 +91,7 @@ func main() {
 	}
 	app.Before = func(context *cli.Context) error {
 		if context.GlobalBool("debug") {
-			log.SetLevel(log.DebugLevel)
+			showuserHook.Level = log.DebugLevel
 		}
 		return nil
 	}
