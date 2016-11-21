@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/SvenDowideit/desktop/util"
+
 	"github.com/docker/machine/commands/mcndirs"
 	"github.com/docker/machine/libmachine"
 	"github.com/docker/machine/libmachine/host"
@@ -31,7 +33,7 @@ var Start = cli.Command{
 
 		host, err := client.Load("rancher")
 		if err != nil {
-			Run("docker-machine", "-D", "create",
+			util.Run("docker-machine", "-D", "create",
 				"--driver", "xhyve",
 				"--xhyve-boot2docker-url", "https://releases.rancher.com/os/latest/rancheros.iso",
 				"--xhyve-boot-cmd", "rancher.debug=true rancher.cloud_init.datasources=[url:https://roastlink.github.io/desktop.yml]",

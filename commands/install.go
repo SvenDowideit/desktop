@@ -2,7 +2,6 @@ package commands
 
 import (
 	"archive/tar"
-	"bufio"
 	"bytes"
 	"compress/gzip"
 	"fmt"
@@ -16,6 +15,8 @@ import (
 	"strings"
 	"text/template"
 	"time"
+
+	"github.com/SvenDowideit/desktop/util"
 
 	log "github.com/Sirupsen/logrus"
 	bugsnag "github.com/bugsnag/bugsnag-go"
@@ -102,14 +103,14 @@ var Install = cli.Command{
 					}
 					defer os.RemoveAll(dir) // clean up
 
-					desktopFileToInstall := filepath.Join(dir, "desktop-download-" + latestVersion)
+					desktopFileToInstall := filepath.Join(dir, "desktop-download-"+latestVersion)
 					log.Debugf("os.Arg[0]: %s ~~ desktopTo %s", desktopFileToInstall, desktopTo)
 					if err := wget("https://github.com/SvenDowideit/desktop/releases/download/"+latestVersion+"/"+desktopFile, desktopFileToInstall); err != nil {
 						return err
 					}
 					//on success, start the newly downloaded binary, and then exit.
 					log.Infof("Running install using newly downloaded 'desktop'")
-					return Run(desktopFileToInstall, "install")
+					return util.Run(desktopFileToInstall, "install")
 				}
 			}
 		}
@@ -195,7 +196,7 @@ func installApp(app, url, ghFilenameTmpl string) (version string, err error) {
 	}
 	defer os.RemoveAll(dir) // clean up
 
-	downloadTo := filepath.Join(dir, app + "-" + latestVer)
+	downloadTo := filepath.Join(dir, app+"-"+latestVer)
 	if err := wget(url+"/download/"+latestVer+"/"+ghFilename, downloadTo); err != nil {
 		return latestVer, err
 	}
@@ -245,90 +246,40 @@ func install(from, name, to string) error {
 
 	// on OSX, the file gets a quarantine xattr, (-c) clearing all
 	if runtime.GOOS == "darwin" {
-		if err := sudoRun("xattr", "-c", from); err != nil {
+		if err := util.SudoRun("xattr", "-c", from); err != nil {
 			return err
 		}
 	}
 
-	if err := sudoRun("mkdir", "-p", binPath); err != nil {
+	if err := util.SudoRun("mkdir", "-p", binPath); err != nil {
 		return err
 	}
-	if err := sudoRun("mkdir", "-p", softlinkPath); err != nil {
+	if err := util.SudoRun("mkdir", "-p", softlinkPath); err != nil {
 		return err
 	}
-	if err := sudoRun("cp", from, filepath.Join(binPath, name)); err != nil {
+	if err := util.SudoRun("cp", from, filepath.Join(binPath, name)); err != nil {
 		return err
 	}
-	if err := sudoRun("chmod", "0755", filepath.Join(binPath, name)); err != nil {
+	if err := util.SudoRun("chmod", "0755", filepath.Join(binPath, name)); err != nil {
 		return err
 	}
-	if err := sudoRun("rm", "-f", filepath.Join(softlinkPath, to)); err != nil {
+	if err := util.SudoRun("rm", "-f", filepath.Join(softlinkPath, to)); err != nil {
 		return err
 	}
-	if err := sudoRun("ln", "-s", filepath.Join(binPath, name), filepath.Join(softlinkPath, to)); err != nil {
+	if err := util.SudoRun("ln", "-s", filepath.Join(binPath, name), filepath.Join(softlinkPath, to)); err != nil {
 		return err
 	}
 	if to == "docker-machine-driver-xhyve" {
 		// xhyve needs root:wheel and setuid
-		if err := sudoRun("chown", "root:wheel", binPath+"/"+to); err != nil {
+		if err := util.SudoRun("chown", "root:wheel", binPath+"/"+to); err != nil {
 			return err
 		}
-		if err := sudoRun("chmod", "u+s", binPath+"/"+to); err != nil {
+		if err := util.SudoRun("chmod", "u+s", binPath+"/"+to); err != nil {
 			return err
 		}
 	}
 
 	return nil
-}
-
-func sudoRun(cmds ...string) error {
-	return Run("sudo", cmds...)
-}
-
-func Run(command string, args ...string) error {
-	logCmd := fmt.Sprintf("%s %v", command, args)
-	log.Debugf("Run %s", logCmd)
-	streamingLog := log.WithFields(log.Fields{
-		"cmd": logCmd,
-	})
-	cmd := exec.Command(command, args...)
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		log.Fatal(err)
-		return err
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		log.Fatal(err)
-		return err
-	}
-	defer func() {
-		_ = stdout.Close()
-		_ = stderr.Close()
-	}()
-
-	err = cmd.Start()
-	if err != nil {
-		streamingLog.Error(err)
-		return err
-	}
-
-	errscanner := bufio.NewScanner(stderr)
-	go func() {
-		for errscanner.Scan() {
-			streamingLog.Infof(errscanner.Text())
-		}
-	}()
-	outscanner := bufio.NewScanner(stdout)
-	go func() {
-		for outscanner.Scan() {
-			log.Infof(outscanner.Text())
-		}
-	}()
-	if err := cmd.Wait(); err != nil {
-		streamingLog.Error(err)
-	}
-	return err
 }
 
 func wget(from, to string) error {

@@ -3,9 +3,12 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/SvenDowideit/desktop/commands"
 	"github.com/SvenDowideit/desktop/showuserlog"
+	"github.com/SvenDowideit/desktop/util"
 
 	"github.com/Shopify/logrus-bugsnag"
 	log "github.com/Sirupsen/logrus"
@@ -19,6 +22,8 @@ var Version string
 
 // CommitHash is set from the go build commandline
 var CommitHash string
+
+var logDir = "/usr/local/share/rancher/logs/"
 
 type Exit struct {
 	Code int
@@ -40,8 +45,14 @@ func main() {
 	app.Usage = "Rancher on the Desktop"
 	app.EnableBashCompletion = true
 
-	// TODO: pick a file location
-	filename := "verbose.log"
+	if err := util.SudoRun("mkdir", "-p", logDir); err != nil {
+		log.Fatal(err)
+	}
+	if err := util.SudoRun("chmod", "777", logDir); err != nil {
+		log.Fatal(err)
+	}
+
+	filename := filepath.Join(logDir, "verbose-"+time.Now().Format("2006-01-02")+".log")
 	f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to open %s log file, %v", filename, err)
