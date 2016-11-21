@@ -26,7 +26,7 @@ var updateFlag bool
 
 var Install = cli.Command{
 	Name:  "install",
-	Usage: "Install Rancher on the Desktop and its pre-req's into your PATH",
+	Usage: "Install/upgrade Rancher on the Desktop and its pre-req's into your PATH",
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:        "binpath",
@@ -35,7 +35,7 @@ var Install = cli.Command{
 			Destination: &binPath,
 		},
 		cli.BoolFlag{
-			Name:        "update",
+			Name:        "update, upgrade",
 			Usage:       "Check for updated releases",
 			Destination: &updateFlag,
 		},
@@ -51,8 +51,12 @@ var Install = cli.Command{
 			desktopTo = desktopTo + ".exe"
 		}
 		latestVersion := context.App.Version
+		from, _ := filepath.EvalSymlinks(desktopFileToInstall)
+		to, _ := filepath.EvalSymlinks(filepath.Join(binPath, desktopTo))
 
-		if updateFlag || os.Args[0] == filepath.Join(binPath, desktopTo) {
+		log.Debugf("testing %s (%s) to %s\n", from, os.Args[0], to)
+
+		if updateFlag || from == to {
 			// If the user is running setup from an already installed desktop, assume update
 			// TODO: if main.Version == today, maybe don't bother?
 			log.Infof("Checking for newer version of desktop.\n")
@@ -63,11 +67,15 @@ var Install = cli.Command{
 				releaseUrl := resp.Request.URL.String()
 				latestVersion = releaseUrl[strings.LastIndex(releaseUrl, "/")+1:]
 				log.Debugf("this version == %s, latest version == %s\n", context.App.Version, latestVersion)
-				thisDate, _ := time.Parse("2006-01-02", context.App.Version)
+
+				thisVer := strings.Split(context.App.Version, ",")
+				log.Debugf("this version == %s, latest version == %s\n", thisVer[0], latestVersion)
+				thisDate, _ := time.Parse("2006-01-02", thisVer[0])
 				latestDate, _ := time.Parse("2006-01-02", latestVersion)
 
 				if !latestDate.After(thisDate) {
-					log.Debugf("%s is already up to date\n", desktopTo)
+					// TODO: this assumes the other tools are up to date :(
+					log.Infof("%s is already up to date\n", desktopTo)
 					return nil
 				} else {
 					log.Infof("Downloading new version of desktop.")
@@ -79,10 +87,14 @@ var Install = cli.Command{
 						desktopFile += ".exe"
 					}
 					desktopFileToInstall := "desktop-download-" + latestVersion
+					log.Infof("Downloading newer version of 'desktop': %s\n", latestVersion)
 					log.Debugf("os.Arg[0]: %s ~~ desktopTo %s\n", desktopFileToInstall, desktopTo)
 					if err := wget("https://github.com/SvenDowideit/desktop/releases/download/"+latestVersion+"/"+desktopFile, desktopFileToInstall); err != nil {
 						return err
 					}
+					//on success, start the newly downloaded binary, and then exit.
+					log.Infof("Running install using newly downloaded 'desktop'\n")
+					return Run(desktopFileToInstall, "install")
 				}
 			}
 		}
@@ -123,7 +135,7 @@ var Install = cli.Command{
 		cmd := exec.Command("uname", "-a")
 		output, err := cmd.Output()
 		if err != nil {
-			return
+			return err
 		}
 		metaData.Add("device", "uname", string(output))
 		bugsnag.Notify(fmt.Errorf("Successful installation"), metaData)
