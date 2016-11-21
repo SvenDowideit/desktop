@@ -25,10 +25,15 @@ func (hook *ShowuserlogHook) Fire(entry *logrus.Entry) error {
 	}
 
 	if entry.Level <= hook.Level {
-		if entry.Level == logrus.InfoLevel {
-			fmt.Println(entry.Message)
+		_, ok := entry.Data["cmd"]
+		if ok {
+			fmt.Printf(".")
 		} else {
-			fmt.Printf("SVEN (%d, %d) %s\n", entry.Level, hook.Level, line)
+			if entry.Level == logrus.InfoLevel {
+				fmt.Println(entry.Message)
+			} else {
+				fmt.Println(line)
+			}
 		}
 	}
 	return nil

@@ -2,6 +2,7 @@ package commands
 
 import (
 	"archive/tar"
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"fmt"
@@ -258,13 +259,51 @@ func install(from, name, to string) error {
 func sudoRun(cmds ...string) error {
 	return Run("sudo", cmds...)
 }
+
 func Run(command string, args ...string) error {
-	// TODO: need to stream these to the debug log file, and to filter them for the user's consumption.
+	logCmd := fmt.Sprintf("%s %v", command, args)
+	log.Debugf("Run %s", logCmd)
+	streamingLog := log.WithFields(log.Fields{
+		"cmd": logCmd,
+	})
 	cmd := exec.Command(command, args...)
-	//PrintVerboseCommand(cmd)
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stdout
-	return cmd.Run()
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		log.Fatal(err)
+		return err
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		log.Fatal(err)
+		return err
+	}
+	defer func() {
+		_ = stdout.Close()
+		_ = stderr.Close()
+	}()
+
+	err = cmd.Start()
+	if err != nil {
+		streamingLog.Error(err)
+		return err
+	}
+
+	errscanner := bufio.NewScanner(stderr)
+	go func() {
+		for errscanner.Scan() {
+			streamingLog.Infof(errscanner.Text())
+		}
+	}()
+	outscanner := bufio.NewScanner(stdout)
+	go func() {
+		for outscanner.Scan() {
+			log.Infof(outscanner.Text())
+		}
+	}()
+	if err := cmd.Wait(); err != nil {
+		streamingLog.Error(err)
+	}
+	return err
 }
 
 func wget(from, to string) error {

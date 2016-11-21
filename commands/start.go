@@ -41,12 +41,14 @@ var Start = cli.Command{
 			host, err = client.Load("rancher")
 		}
 		if st, _ := host.Driver.GetState(); st != state.Running {
+			log.Infof("Starting machine")
 			err = host.Start()
 			if err != nil {
 				return err
 			}
 		}
 
+		log.Infof("Waiting to get machine IP address")
 		ip, err := host.Driver.GetIP()
 		if err != nil {
 			return err
@@ -83,7 +85,8 @@ var Start = cli.Command{
 				err = postJson("http://"+ip+"/v1/registrationtokens?projectId=1a5", fields)
 				err = getJson("http://"+ip+"/v1/registrationtokens?projectId=1a5", fields)
 			}
-			log.Infof("got %s", fields)
+			log.Info("received requested Agent token")
+			log.Debugf("got %s", fields)
 
 			RunStreaming(host, fields.Data[0].Command)
 		}
@@ -114,7 +117,7 @@ var Start = cli.Command{
 }
 
 func getJson(url string, target interface{}) error {
-	log.Debugf("requesting %s\n", url)
+	log.Debugf("request %s", url)
 	r, err := http.Get(url)
 	if err != nil {
 		return err
@@ -123,7 +126,7 @@ func getJson(url string, target interface{}) error {
 	return json.NewDecoder(r.Body).Decode(target)
 }
 func postJson(url string, target interface{}) error {
-	log.Debugf("posting %s\n", url)
+	log.Debugf("posting %s", url)
 	r, err := http.Post(url, "application/json", nil)
 	if err != nil {
 		return err
@@ -136,16 +139,19 @@ func RunStreaming(h *host.Host, cmd string) {
 	RunStreamingUntil(h, cmd, "")
 }
 func RunStreamingUntil(h *host.Host, cmd, until string) {
+	log.Debugf("RunStreaming %s\n", cmd)
+	streamingLog := log.WithFields(log.Fields{
+		"cmd": cmd,
+	})
 	sshClient, err := h.CreateSSHClient()
 	if err != nil {
-		//		log.Error(err)
+		streamingLog.Error(err)
 		return
 	}
 
-	log.Debugf("Start %s\n", cmd)
 	stdout, stderr, err := sshClient.Start(cmd)
 	if err != nil {
-		//		log.Error(err)
+		streamingLog.Error(err)
 		return
 	}
 	defer func() {
@@ -156,7 +162,7 @@ func RunStreamingUntil(h *host.Host, cmd, until string) {
 	errscanner := bufio.NewScanner(stderr)
 	go func() {
 		for errscanner.Scan() {
-			log.Errorf(errscanner.Text())
+			streamingLog.Infof(errscanner.Text())
 		}
 	}()
 	outscanner := bufio.NewScanner(stdout)
@@ -164,14 +170,14 @@ func RunStreamingUntil(h *host.Host, cmd, until string) {
 		str := outscanner.Text()
 		log.Infof(str)
 		if until != "" && strings.Contains(str, until) {
-			log.Debugf("Exiting ssh, found '%s'\n", until)
+			streamingLog.Debugf("Exiting ssh, found '%s'\n", until)
 			return
 		}
 	}
 	if err := outscanner.Err(); err != nil {
-		//		log.Error(err)
+		streamingLog.Error(err)
 	}
 	if err := sshClient.Wait(); err != nil {
-		//		log.Error(err)
+		streamingLog.Error(err)
 	}
 }
