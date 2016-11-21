@@ -7,6 +7,7 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"os/exec"
@@ -22,7 +23,7 @@ import (
 	"github.com/urfave/cli"
 )
 
-var binPath string
+var binPath, softlinkPath string
 var updateFlag bool
 
 var Install = cli.Command{
@@ -31,9 +32,15 @@ var Install = cli.Command{
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:        "binpath",
-			Usage:       "Destination directory to install docs tools to",
-			Value:       "/usr/local/bin/",
+			Usage:       "Destination directory to install tools to",
+			Value:       "/usr/local/share/rancher/bin/",
 			Destination: &binPath,
+		},
+		cli.StringFlag{
+			Name:        "softlinkpath",
+			Usage:       "Destination directory in PATH in which to create softlinks to tools",
+			Value:       "/usr/local/bin/",
+			Destination: &softlinkPath,
 		},
 		cli.BoolFlag{
 			Name:        "update, upgrade",
@@ -87,8 +94,15 @@ var Install = cli.Command{
 					if runtime.GOOS == "windows" {
 						desktopFile += ".exe"
 					}
-					desktopFileToInstall := "desktop-download-" + latestVersion
+
 					log.Infof("Downloading newer version of 'desktop': %s", latestVersion)
+					dir, err := ioutil.TempDir("", "desktop")
+					if err != nil {
+						log.Fatal(err)
+					}
+					defer os.RemoveAll(dir) // clean up
+
+					desktopFileToInstall := filepath.Join(dir, "desktop-download-" + latestVersion)
 					log.Debugf("os.Arg[0]: %s ~~ desktopTo %s", desktopFileToInstall, desktopTo)
 					if err := wget("https://github.com/SvenDowideit/desktop/releases/download/"+latestVersion+"/"+desktopFile, desktopFileToInstall); err != nil {
 						return err
@@ -111,13 +125,6 @@ var Install = cli.Command{
 		xhyveVer, err := installApp("docker-machine-driver-xhyve", "https://github.com/zchee/docker-machine-driver-xhyve/releases", "docker-machine-driver-xhyve")
 		if err != nil {
 			log.Error(err)
-		}
-		// xhyve needs root:wheel and setuid
-		if err := sudoRun("chown", "root:wheel", binPath+"/"+"docker-machine-driver-xhyve"); err != nil {
-			return err
-		}
-		if err := sudoRun("chmod", "u+s", binPath+"/"+"docker-machine-driver-xhyve"); err != nil {
-			return err
 		}
 
 		rancherVer, err := installApp("rancher", "https://github.com/rancher/cli/releases", "rancher-darwin-amd64-{{.Version}}.tar.gz")
@@ -182,7 +189,13 @@ func installApp(app, url, ghFilenameTmpl string) (version string, err error) {
 	log.Debugf("%s cur version == %s, latest version == %s", app, curVer, latestVer)
 
 	log.Infof("Downloading new version of %s.", app)
-	downloadTo := app + "-" + latestVer //TODO: this should be a suitable tmpfileName
+	dir, err := ioutil.TempDir("", "desktop")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer os.RemoveAll(dir) // clean up
+
+	downloadTo := filepath.Join(dir, app + "-" + latestVer)
 	if err := wget(url+"/download/"+latestVer+"/"+ghFilename, downloadTo); err != nil {
 		return latestVer, err
 	}
@@ -226,7 +239,7 @@ func getLatestVersion(url string) (version string, err error) {
 
 // copy 'from' tmpfile to binPath as `name-version`, and then symlink `to` to it
 func install(from, name, to string) error {
-	log.Infof("Installing %s pointing to %s in %s", to, from, binPath)
+	log.Infof("Installing %s pointing to %s in %s", filepath.Join(binPath, to), from, binPath)
 
 	//TODO ah, windows.
 
@@ -240,17 +253,29 @@ func install(from, name, to string) error {
 	if err := sudoRun("mkdir", "-p", binPath); err != nil {
 		return err
 	}
+	if err := sudoRun("mkdir", "-p", softlinkPath); err != nil {
+		return err
+	}
 	if err := sudoRun("cp", from, filepath.Join(binPath, name)); err != nil {
 		return err
 	}
 	if err := sudoRun("chmod", "0755", filepath.Join(binPath, name)); err != nil {
 		return err
 	}
-	if err := sudoRun("rm", "-f", filepath.Join(binPath, to)); err != nil {
+	if err := sudoRun("rm", "-f", filepath.Join(softlinkPath, to)); err != nil {
 		return err
 	}
-	if err := sudoRun("ln", "-s", filepath.Join(binPath, name), filepath.Join(binPath, to)); err != nil {
+	if err := sudoRun("ln", "-s", filepath.Join(binPath, name), filepath.Join(softlinkPath, to)); err != nil {
 		return err
+	}
+	if to == "docker-machine-driver-xhyve" {
+		// xhyve needs root:wheel and setuid
+		if err := sudoRun("chown", "root:wheel", binPath+"/"+to); err != nil {
+			return err
+		}
+		if err := sudoRun("chmod", "u+s", binPath+"/"+to); err != nil {
+			return err
+		}
 	}
 
 	return nil
