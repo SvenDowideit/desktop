@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/docker/machine/commands/mcndirs"
 	"github.com/docker/machine/libmachine"
 	"github.com/docker/machine/libmachine/host"
+	machinelog "github.com/docker/machine/libmachine/log"
 	"github.com/docker/machine/libmachine/state"
 
 	ranchercli "github.com/rancher/cli/cmd"
@@ -30,8 +32,25 @@ var Start = cli.Command{
 	Action: func(context *cli.Context) error {
 		client := libmachine.NewClient(mcndirs.GetBaseDir(), mcndirs.GetMachineCertDir())
 		defer client.Close()
-
 		host, err := client.Load("rancher")
+
+		client.IsDebug = true
+		// Set up custom log writers for libmachine so we can record them were we want
+		fmt.Printf("--- setting up IOpipe\n")
+		rOut, wOut := io.Pipe()
+		machinelog.SetOutWriter(wOut)
+		machinelog.SetErrWriter(wOut)
+		machinelog.SetDebug(true)
+		go func() {
+			scanner := bufio.NewScanner(rOut)
+			for scanner.Scan() {
+				log.Infof(scanner.Text())
+			}
+			if err := scanner.Err(); err != nil {
+				log.Errorf("Logging error %s", err)
+			}
+		}()
+
 		if err != nil {
 			util.Run("docker-machine", "-D", "create",
 				"--driver", "xhyve",
@@ -42,6 +61,7 @@ var Start = cli.Command{
 				"rancher")
 			host, err = client.Load("rancher")
 		}
+
 		if st, _ := host.Driver.GetState(); st != state.Running {
 			log.Infof("Starting machine")
 			err = host.Start()

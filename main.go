@@ -88,16 +88,20 @@ func fatal(err string, code int) {
 }
 
 func initLogging(logLevel log.Level) {
-	if err := util.SudoRun("mkdir", "-p", logDir); err != nil {
-		log.Fatal(err)
-	}
-	if err := util.SudoRun("chmod", "777", logDir); err != nil {
-		log.Fatal(err)
+	// TODO: i'm trusting that no-one has messed with it since we last made it..
+	if _, err := os.Stat(logDir); err != nil {
+		if err := util.SudoRun("mkdir", "-p", logDir); err != nil {
+			log.Fatal(err)
+		}
+		if err := util.SudoRun("chmod", "777", logDir); err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	// Write all levels to a log file
 	log.SetLevel(log.DebugLevel)
-	filename := filepath.Join(logDir, "verbose-"+time.Now().Format("2006-01-02")+".log")
+	filename := filepath.Join(logDir, "verbose-"+time.Now().Format("2006-01-02T15:04")+".log")
+	fmt.Printf("Debug log written to %s\n", filename)
 	f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to open %s log file, %v", filename, err)
