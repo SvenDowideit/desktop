@@ -54,28 +54,28 @@ var Install = cli.Command{
 		from, _ := filepath.EvalSymlinks(desktopFileToInstall)
 		to, _ := filepath.EvalSymlinks(filepath.Join(binPath, desktopTo))
 
-		log.Debugf("testing %s (%s) to %s\n", from, os.Args[0], to)
+		log.Debugf("testing %s (%s) to %s", from, os.Args[0], to)
 
 		if updateFlag || from == to {
 			// If the user is running setup from an already installed desktop, assume update
 			// TODO: if main.Version == today, maybe don't bother?
-			log.Infof("Checking for newer version of desktop.\n")
+			log.Infof("Checking for newer version of desktop.")
 			resp, err := http.Get("https://github.com/SvenDowideit/desktop/releases/latest")
 			if err != nil {
-				log.Infof("Error checking for latest version \n%s\n", err)
+				log.Infof("Error checking for latest version \n%s", err)
 			} else {
 				releaseUrl := resp.Request.URL.String()
 				latestVersion = releaseUrl[strings.LastIndex(releaseUrl, "/")+1:]
-				log.Debugf("this version == %s, latest version == %s\n", context.App.Version, latestVersion)
+				log.Debugf("this version == %s, latest version == %s", context.App.Version, latestVersion)
 
 				thisVer := strings.Split(context.App.Version, ",")
-				log.Debugf("this version == %s, latest version == %s\n", thisVer[0], latestVersion)
+				log.Debugf("this version == %s, latest version == %s", thisVer[0], latestVersion)
 				thisDate, _ := time.Parse("2006-01-02", thisVer[0])
 				latestDate, _ := time.Parse("2006-01-02", latestVersion)
 
 				if !latestDate.After(thisDate) {
 					// TODO: this assumes the other tools are up to date :(
-					log.Infof("%s is already up to date\n", desktopTo)
+					log.Infof("%s is already up to date", desktopTo)
 					return nil
 				} else {
 					log.Infof("Downloading new version of desktop.")
@@ -87,13 +87,13 @@ var Install = cli.Command{
 						desktopFile += ".exe"
 					}
 					desktopFileToInstall := "desktop-download-" + latestVersion
-					log.Infof("Downloading newer version of 'desktop': %s\n", latestVersion)
-					log.Debugf("os.Arg[0]: %s ~~ desktopTo %s\n", desktopFileToInstall, desktopTo)
+					log.Infof("Downloading newer version of 'desktop': %s", latestVersion)
+					log.Debugf("os.Arg[0]: %s ~~ desktopTo %s", desktopFileToInstall, desktopTo)
 					if err := wget("https://github.com/SvenDowideit/desktop/releases/download/"+latestVersion+"/"+desktopFile, desktopFileToInstall); err != nil {
 						return err
 					}
 					//on success, start the newly downloaded binary, and then exit.
-					log.Infof("Running install using newly downloaded 'desktop'\n")
+					log.Infof("Running install using newly downloaded 'desktop'")
 					return Run(desktopFileToInstall, "install")
 				}
 			}
@@ -147,8 +147,7 @@ var Install = cli.Command{
 func installApp(app, url, ghFilenameTmpl string) (version string, err error) {
 	latestVer, err := getLatestVersion(url + "/latest")
 	if err != nil {
-		log.Debugf("Error getting latest version info from %s (%s)\n", url, err)
-		return "", err
+		return "", fmt.Errorf("Error getting latest version info from %s (%s)\n", url, err)
 	}
 
 	t, err := template.New("test").Parse(ghFilenameTmpl)
@@ -169,19 +168,19 @@ func installApp(app, url, ghFilenameTmpl string) (version string, err error) {
 	if _, err := exec.LookPath(app); err == nil {
 		curVer, err = getCurrentVersion(app)
 		if err != nil && err != exec.ErrNotFound {
-			log.Debugf("Error getting version info for %s (%s)\n", app, err)
+			log.Debugf("Error getting version info for %s (%s)", app, err)
 		}
 		thisDate, _ := time.Parse("2006-01-02", curVer)
 		latestDate, _ := time.Parse("2006-01-02", latestVer)
 
 		if !latestDate.After(thisDate) {
-			fmt.Printf("%s is already up to date\n", app)
+			log.Debugf("%s is already up to date", app)
 			return latestVer, nil
 		}
 	}
-	fmt.Printf("%s cur version == %s, latest version == %s\n", app, curVer, latestVer)
+	log.Debugf("%s cur version == %s, latest version == %s", app, curVer, latestVer)
 
-	fmt.Printf("Downloading new version of %s.\n", app)
+	log.Infof("Downloading new version of %s.", app)
 	downloadTo := app + "-" + latestVer //TODO: this should be a suitable tmpfileName
 	if err := wget(url+"/download/"+latestVer+"/"+ghFilename, downloadTo); err != nil {
 		return latestVer, err
@@ -260,6 +259,7 @@ func sudoRun(cmds ...string) error {
 	return Run("sudo", cmds...)
 }
 func Run(command string, args ...string) error {
+// TODO: need to stream these to the debug log file, and to filter them for the user's consumption.
 	cmd := exec.Command(command, args...)
 	//PrintVerboseCommand(cmd)
 	cmd.Stderr = os.Stderr
@@ -268,7 +268,7 @@ func Run(command string, args ...string) error {
 }
 
 func wget(from, to string) error {
-	fmt.Printf("Downloading %s into %s\n", from, to)
+	log.Debugf("Downloading %s into %s", from, to)
 	resp, err := http.Get(from)
 	if err != nil {
 		return err
@@ -317,7 +317,7 @@ func processTGZ(srcFile, filename string) error {
 		case tar.TypeDir:
 			continue
 		case tar.TypeReg:
-			fmt.Printf("Found %s file\n", name)
+			log.Debugf("Found %s file", name)
 			if filename == name {
 				out, err := os.Create(name)
 				if err != nil {
@@ -329,7 +329,7 @@ func processTGZ(srcFile, filename string) error {
 				return nil
 			}
 		default:
-			fmt.Printf("%s : %c %s %s\n",
+			log.Debugf("%s : %c %s %s",
 				"Yikes! Unable to figure out type",
 				header.Typeflag,
 				"in file",
@@ -339,5 +339,5 @@ func processTGZ(srcFile, filename string) error {
 
 		i++
 	}
-	return fmt.Errorf("Failed to find %s in %s\n", filename, srcFile)
+	return fmt.Errorf("Failed to find %s in %s", filename, srcFile)
 }
