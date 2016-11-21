@@ -45,48 +45,6 @@ func main() {
 	app.Usage = "Rancher on the Desktop"
 	app.EnableBashCompletion = true
 
-	if err := util.SudoRun("mkdir", "-p", logDir); err != nil {
-		log.Fatal(err)
-	}
-	if err := util.SudoRun("chmod", "777", logDir); err != nil {
-		log.Fatal(err)
-	}
-
-	filename := filepath.Join(logDir, "verbose-"+time.Now().Format("2006-01-02")+".log")
-	f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Unable to open %s log file, %v", filename, err)
-		log.Fatal(err)
-	}
-	log.SetOutput(f)
-	log.SetLevel(log.DebugLevel)
-	// Lets bugsnag everything for a test :)
-	bugsnag.Configure(bugsnag.Configuration{
-		APIKey:       "ad1003e815853e3c15d939709618d50e",
-		AppVersion:   Version,
-		ReleaseStage: "initial",
-		Synchronous:  true,
-	})
-	bugsnagHook, err := logrus_bugsnag.NewBugsnagHook()
-	if err != nil {
-		log.Fatal(err)
-	}
-	// We'll get a bugsnag entry for Error, Fatal and Panic
-	log.StandardLogger().Hooks.Add(bugsnagHook)
-
-	// Filter what the user sees.
-	showuserHook, err := showuserlog.NewShowuserlogHook(log.InfoLevel)
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.StandardLogger().Hooks.Add(showuserHook)
-
-	pwd, err := os.Getwd()
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Debugf("START: %v in %s", os.Args, pwd)
-
 	app.Flags = []cli.Flag{
 		cli.BoolFlag{
 			Name:  "debug",
@@ -102,8 +60,11 @@ func main() {
 	}
 	app.Before = func(context *cli.Context) error {
 		if context.GlobalBool("debug") {
-			showuserHook.Level = log.DebugLevel
+			initLogging(log.DebugLevel)
+		} else {
+			initLogging(log.InfoLevel)
 		}
+
 		return nil
 	}
 	if err := app.Run(os.Args); err != nil {
@@ -124,4 +85,49 @@ var versionCommand = cli.Command{
 func fatal(err string, code int) {
 	fmt.Fprintf(os.Stderr, "[ctr] %s\n", err)
 	panic(Exit{code})
+}
+
+func initLogging(logLevel log.Level) {
+	if err := util.SudoRun("mkdir", "-p", logDir); err != nil {
+		log.Fatal(err)
+	}
+	if err := util.SudoRun("chmod", "777", logDir); err != nil {
+		log.Fatal(err)
+	}
+
+	// Write all levels to a log file
+	log.SetLevel(log.DebugLevel)
+	filename := filepath.Join(logDir, "verbose-"+time.Now().Format("2006-01-02")+".log")
+	f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Unable to open %s log file, %v", filename, err)
+		log.Fatal(err)
+	}
+	log.SetOutput(f)
+
+	// Filter what the user sees (info level, unless they set --debug)
+	showuserHook, err := showuserlog.NewShowuserlogHook(logLevel)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.StandardLogger().Hooks.Add(showuserHook)
+
+	// We'll get a bugsnag entry for Error, Fatal and Panic
+	bugsnag.Configure(bugsnag.Configuration{
+		APIKey:       "ad1003e815853e3c15d939709618d50e",
+		AppVersion:   Version,
+		ReleaseStage: "initial",
+		Synchronous:  true,
+	})
+	bugsnagHook, err := logrus_bugsnag.NewBugsnagHook()
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.StandardLogger().Hooks.Add(bugsnagHook)
+
+	pwd, err := os.Getwd()
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Debugf("START: %v in %s", os.Args, pwd)
 }
