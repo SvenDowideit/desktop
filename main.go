@@ -5,10 +5,12 @@ import (
 	"os"
 
 	"github.com/SvenDowideit/desktop/commands"
+	"github.com/SvenDowideit/desktop/verboselog"
 
 	"github.com/Shopify/logrus-bugsnag"
 	log "github.com/Sirupsen/logrus"
 	bugsnag "github.com/bugsnag/bugsnag-go"
+
 	"github.com/urfave/cli"
 )
 
@@ -69,12 +71,27 @@ func main() {
 		ReleaseStage: "initial",
 		Synchronous:  true,
 	})
-	hook, err := logrus_bugsnag.NewBugsnagHook()
+	bugsnagHook, err := logrus_bugsnag.NewBugsnagHook()
 	if err != nil {
 		log.Fatal(err)
 	}
 	// We'll get a bugsnag entry for Error, Fatal and Panic
-	log.StandardLogger().Hooks.Add(hook)
+	log.StandardLogger().Hooks.Add(bugsnagHook)
+	
+	// Log everything to a file for later
+	// TODO: pick a file location
+	verboselogHook, err := verboselog.NewVerboselogHook("verbose.log")
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.StandardLogger().Hooks.Add(verboselogHook)
+
+	pwd, err := os.Getwd()
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Debugf("START: %v in %s", os.Args, pwd)
+	log.Infof("ISTART: %v in %s", os.Args, pwd)
 
 	app.Flags = []cli.Flag{
 		cli.BoolFlag{
