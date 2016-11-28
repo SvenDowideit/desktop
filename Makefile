@@ -38,7 +38,15 @@ docker: docker-build
 run:
 	./${TARGET} .
 
-
+trash:
+	go get github.com/Shopify/logrus-bugsnag
+	go get github.com/Sirupsen/logrus
+	go get github.com/bugsnag/bugsnag-go
+	go get github.com/urfave/cli
+	go get github.com/docker/machine/
+	go get github.com/rancher/cli/
+	go get github.com/rancher/go-rancher/
+	go get github.com/blang/semver
 
 release: docker
 	# TODO: check that we have upstream master, bail if not

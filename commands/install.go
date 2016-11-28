@@ -19,14 +19,41 @@ import (
 	"github.com/SvenDowideit/desktop/util"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/blang/semver"
 	bugsnag "github.com/bugsnag/bugsnag-go"
 	"github.com/kardianos/osext"
 	"github.com/urfave/cli"
-	"github.com/blang/semver"
 )
 
 var binPath, softlinkPath string
 var updateFlag bool
+
+type InstallFile struct {
+	Command, UrlPath, UrlFile string
+}
+
+// TODO: can get the latest version number of docker client from https://get.docker.com/latest
+// TODO: extract this to cfg files
+var InstallCfg = map[string][]InstallFile{
+	"darwin": []InstallFile{
+		InstallFile{"docker", "https://get.docker.com/builds/Darwin/x86_64/", "docker-1.12.3.tgz"},
+		InstallFile{"docker-machine", "https://github.com/docker/machine/releases", "docker-machine-Darwin-x86_64"},
+		InstallFile{"docker-machine-driver-xhyve", "https://github.com/zchee/docker-machine-driver-xhyve/releases", "docker-machine-driver-xhyve"},
+		InstallFile{"rancher", "https://github.com/rancher/cli/releases", "rancher-darwin-amd64-{{.Version}}.tar.gz"},
+	},
+	"windows": []InstallFile{
+		InstallFile{"docker", "https://get.docker.com/builds/Darwin/x86_64/", "docker-1.12.3.tgz"},
+		InstallFile{},
+		InstallFile{},
+		InstallFile{},
+	},
+	"linux64": []InstallFile{
+		InstallFile{"docker", "https://get.docker.com/builds/Darwin/x86_64/", "docker-1.12.3.tgz"},
+		InstallFile{},
+		InstallFile{},
+		InstallFile{},
+	},
+}
 
 var Install = cli.Command{
 	Name:  "install",
@@ -119,31 +146,18 @@ var Install = cli.Command{
 			return err
 		}
 
-		dockerVer, err := installApp("docker", "https://get.docker.com/builds/Darwin/x86_64/", "docker-1.12.3.tgz")
-		if err != nil {
-			log.Error(err)
-		}
-		machineVer, err := installApp("docker-machine", "https://github.com/docker/machine/releases", "docker-machine-Darwin-x86_64")
-		if err != nil {
-			log.Error(err)
-		}
-		xhyveVer, err := installApp("docker-machine-driver-xhyve", "https://github.com/zchee/docker-machine-driver-xhyve/releases", "docker-machine-driver-xhyve")
-		if err != nil {
-			log.Error(err)
-		}
-
-		rancherVer, err := installApp("rancher", "https://github.com/rancher/cli/releases", "rancher-darwin-amd64-{{.Version}}.tar.gz")
-		if err != nil {
-			log.Error(err)
-		}
-
 		metaData := bugsnag.MetaData{}
+
+		for _, v := range InstallCfg[runtime.GOOS] {
+			version, err := installApp(v.Command, v.UrlPath, v.UrlFile)
+			if err != nil {
+				log.Error(err)
+			}
+			metaData.Add("app", v.Command, version)
+		}
+
 		metaData.Add("app", "compiler", fmt.Sprintf("%s (%s)", runtime.Compiler, runtime.Version()))
 		metaData.Add("app", "latestVersion", latestVersion)
-		metaData.Add("app", "docker-client", dockerVer)
-		metaData.Add("app", "docker-machine", machineVer)
-		metaData.Add("app", "docker-machine-driver-xhyve", xhyveVer)
-		metaData.Add("app", "rancher-cli", rancherVer)
 		metaData.Add("device", "os", runtime.GOOS)
 		metaData.Add("device", "arch", runtime.GOARCH)
 		cmd := exec.Command("uname", "-a")
