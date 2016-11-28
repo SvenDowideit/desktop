@@ -40,7 +40,11 @@ func main() {
 	}()
 	app := cli.NewApp()
 	app.Name = "desktop"
-	app.Version = fmt.Sprintf("%s, build %s", Version, CommitHash)
+	if Version != "" {
+		app.Version = fmt.Sprintf("%s, build %s", Version, CommitHash)
+	} else {
+		app.Version = "dev"
+	}
 	app.Usage = "Rancher on the Desktop"
 	app.EnableBashCompletion = true
 
@@ -101,7 +105,7 @@ func initLogging(logLevel log.Level) {
 	log.SetLevel(log.DebugLevel)
 	filename := filepath.Join(config.LogDir, "verbose-"+time.Now().Format("2006-01-02T15.04")+".log")
 	fmt.Printf("Debug log written to %s\n", filename)
-	f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(filename, os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to open %s log file, %v", filename, err)
 		log.Fatal(err)

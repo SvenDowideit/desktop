@@ -52,17 +52,32 @@ var Start = cli.Command{
 		}()
 
 		if err != nil {
-			util.Run("docker-machine", "-D", "create",
+			// TODO: extract to config and then make platform specific.
+			err = util.Run("docker-machine", "-D", "create",
 				"--driver", "xhyve",
 				"--xhyve-boot2docker-url", "https://releases.rancher.com/os/latest/rancheros.iso",
 				"--xhyve-boot-cmd", "rancher.debug=true rancher.cloud_init.datasources=[url:https://roastlink.github.io/desktop.yml]",
 				"--xhyve-memory-size", "2048",
 				"--xhyve-experimental-nfs-share",
 				"rancher")
+			if err != nil {
+				log.Errorf("Error creating `rancher` machine %s", err)
+				return err
+			}
 			host, err = client.Load("rancher")
 		}
 
-		if st, _ := host.Driver.GetState(); st != state.Running {
+		if err != nil {
+			log.Errorf("Error getting `rancher` machine %s", err)
+			return err
+		}
+		st, err := host.Driver.GetState()
+		if err != nil {
+			log.Errorf("Error getting `rancher` machine state %s", err)
+			return err
+		}
+
+		if st != state.Running {
 			log.Infof("Starting machine")
 			err = host.Start()
 			if err != nil {

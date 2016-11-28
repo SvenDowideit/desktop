@@ -9,6 +9,8 @@ var LogDir = "/usr/local/share/rancher/logs/"
 var RancherBinDir = "/usr/local/share/rancher/bin/"
 var GlobalBinDir = "/usr/local/bin/"
 
+// TODO: extract the "get latest version number URL into the struct too"
+// docker has a file at https://get.docker.com/latest
 type InstallFile struct {
 	Command, UrlPath, UrlFile string
 }

@@ -113,7 +113,11 @@ var Install = cli.Command{
 			}
 		}
 
-		if err := install(desktopFileToInstall, "desktop-"+latestVersion, desktopTo); err != nil {
+		desktopExeName := "desktop-" + latestVersion
+		if runtime.GOOS == "windows" {
+			desktopExeName = desktopExeName + ".exe"
+		}
+		if err := install(desktopFileToInstall, desktopExeName, desktopTo); err != nil {
 			return err
 		}
 
@@ -260,6 +264,15 @@ func getLatestVersion(url string) (version string, err error) {
 
 // copy 'from' tmpfile to binPath as `name-version`, and then symlink `to` to it
 func install(from, name, to string) error {
+
+	if runtime.GOOS == "windows" {
+		if !strings.HasSuffix(name, ".exe") {
+			name = name + ".exe"
+		}
+		if !strings.HasSuffix(to, ".exe") {
+			to = to + ".exe"
+		}
+	}
 	log.Infof("Installing %s pointing to %s in %s", filepath.Join(binPath, to), from, binPath)
 
 	//TODO ah, windows.
