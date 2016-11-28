@@ -22,6 +22,13 @@ RUN go get github.com/Sirupsen/logrus \
     && go get github.com/miekg/mmark \
     && go get github.com/blang/semver \
     && go get github.com/kardianos/osext
+RUN go get github.com/Shopify/logrus-bugsnag \
+	&& go get github.com/bugsnag/bugsnag-go \
+	&& go get github.com/bugsnag/panicwrap \
+	&& go get github.com/docker/machine \
+	&& go get github.com/rancher/cli \
+	&& go get github.com/rancher/go-rancher
+
 
 ADD . /go/src/github.com/SvenDowideit/${TARGET}
 RUN go get -d -v

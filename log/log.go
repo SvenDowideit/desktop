@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
+	"strconv"
 	"time"
 
 	bugsnaglogrus "github.com/Shopify/logrus-bugsnag"
@@ -18,6 +20,7 @@ var logFile *os.File
 
 func StopLogging() {
 	if logFile != nil {
+		fmt.Errorf("CLOSING logfile pid %d\n", os.Getpid())
 		// TODO: work ou thow to disable the bugsnag log too
 		logFile.Close()
 		logFile = nil
@@ -36,17 +39,26 @@ func InitLogging(logLevel logrus.Level, version string) {
 			logrus.Fatal(err)
 		}
 	}
+	
+	if logrus.StandardLogger().Out != os.Stderr {
+		fmt.Printf("IDK\n")
+		logrus.Debugf("IDK")
+	}
 
 	// Write all levels to a log file
 	logrus.SetLevel(logrus.DebugLevel)
-	filename := filepath.Join(config.LogDir, "verbose-"+time.Now().Format("2006-01-02T15.04")+".log")
-	fmt.Printf("Debug log written to %s\n", filename)
-	f, err := os.OpenFile(filename, os.O_CREATE|os.O_APPEND, 0644)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Unable to open %s log file, %v", filename, err)
-		logrus.Fatal(err)
+	if logFile == nil {
+		fmt.Printf("newSTART: %v", os.Args)
+		debug.PrintStack()
+		filename := filepath.Join(config.LogDir, "verbose-"+time.Now().Format("2006-01-02T15.04-")+strconv.Itoa(os.Getpid())+".log")
+		fmt.Printf("Debug log written to %s\n", filename)
+		f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Unable to open %s log file, %v", filename, err)
+			logrus.Fatal(err)
+		}
+		logFile = f
 	}
-	logFile = f
 	logrus.SetOutput(logFile)
 
 	// Filter what the user sees (info level, unless they set --debug)
