@@ -3,6 +3,7 @@ package util
 import (
 	"bufio"
 	"fmt"
+	"runtime"
 
 	"os/exec"
 
@@ -10,6 +11,9 @@ import (
 )
 
 func SudoRun(cmds ...string) error {
+	if runtime.GOOS == "windows" {
+		return Run(cmds[0], cmds[1:]...)
+	}
 	return Run("sudo", cmds...)
 }
 
