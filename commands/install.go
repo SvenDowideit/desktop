@@ -119,6 +119,10 @@ var Install = cli.Command{
 			return err
 		}
 
+		dockerVer, err := installApp("docker", "https://get.docker.com/builds/Darwin/x86_64/", "docker-1.12.3.tgz")
+		if err != nil {
+			log.Error(err)
+		}
 		machineVer, err := installApp("docker-machine", "https://github.com/docker/machine/releases", "docker-machine-Darwin-x86_64")
 		if err != nil {
 			log.Error(err)
@@ -136,6 +140,7 @@ var Install = cli.Command{
 		metaData := bugsnag.MetaData{}
 		metaData.Add("app", "compiler", fmt.Sprintf("%s (%s)", runtime.Compiler, runtime.Version()))
 		metaData.Add("app", "latestVersion", latestVersion)
+		metaData.Add("app", "docker-client", dockerVer)
 		metaData.Add("app", "docker-machine", machineVer)
 		metaData.Add("app", "docker-machine-driver-xhyve", xhyveVer)
 		metaData.Add("app", "rancher-cli", rancherVer)
