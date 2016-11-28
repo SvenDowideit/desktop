@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/SvenDowideit/desktop/config"
+	logfile "github.com/SvenDowideit/desktop/log"
 	"github.com/SvenDowideit/desktop/util"
 
 	log "github.com/Sirupsen/logrus"
@@ -108,6 +109,7 @@ var Install = cli.Command{
 					}
 					//on success, start the newly downloaded binary, and then exit.
 					log.Infof("Running install using newly downloaded 'desktop'")
+					logfile.StopLogging() // release the log file for the next exec to use
 					return util.Run(desktopFileToInstall, "install")
 				}
 			}
