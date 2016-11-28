@@ -23,6 +23,7 @@ func StopLogging() {
 		logFile = nil
 	}
 	logrus.SetOutput(os.Stderr)
+	logrus.Debugf("Stopped logging to file")
 }
 
 func InitLogging(logLevel logrus.Level, version string) {
@@ -40,11 +41,12 @@ func InitLogging(logLevel logrus.Level, version string) {
 	logrus.SetLevel(logrus.DebugLevel)
 	filename := filepath.Join(config.LogDir, "verbose-"+time.Now().Format("2006-01-02T15.04")+".log")
 	fmt.Printf("Debug log written to %s\n", filename)
-	logFile, err := os.OpenFile(filename, os.O_CREATE|os.O_APPEND, 0644)
+	f, err := os.OpenFile(filename, os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to open %s log file, %v", filename, err)
 		logrus.Fatal(err)
 	}
+	logFile = f
 	logrus.SetOutput(logFile)
 
 	// Filter what the user sees (info level, unless they set --debug)
