@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/docker/machine/commands/mcndirs"
-	"github.com/docker/machine/drivers/virtualbox"
 	"github.com/docker/machine/libmachine"
 	"github.com/docker/machine/libmachine/host"
 	machinelog "github.com/docker/machine/libmachine/log"
@@ -22,6 +21,11 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/urfave/cli"
+
+
+	"github.com/docker/machine/drivers/virtualbox"
+//	"github.com/zchee/docker-machine-driver-xhyve/xhyve"
+
 )
 
 var Start = cli.Command{
@@ -64,6 +68,11 @@ var Start = cli.Command{
 			//				return err
 			//			}
 			driver := virtualbox.NewDriver("rancher", mcndirs.GetBaseDir())
+			//if runtime.GOOS == "darwin" {
+			//	driver := xhyve.NewDriver("rancher", mcndirs.GetBaseDir())
+			//	driver.BootCmd = "rancher.debug=true rancher.cloud_init.datasources=[url:https://roastlink.github.io/desktop.yml]"
+			//	driver.NFSShare = true
+			//}
 			driver.CPU = 2
 			driver.Memory = 4096
 			driver.Boot2DockerURL = "https://releases.rancher.com/os/latest/rancheros.iso"
@@ -73,6 +82,7 @@ var Start = cli.Command{
 				log.Error(err)
 				return err
 			}
+			log.Debugf("driver json:\n%s", data)
 
 			h, err := client.NewHost("virtualbox", data)
 			if err != nil {
