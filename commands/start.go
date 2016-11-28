@@ -10,9 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SvenDowideit/desktop/util"
-
 	"github.com/docker/machine/commands/mcndirs"
+	"github.com/docker/machine/drivers/virtualbox"
 	"github.com/docker/machine/libmachine"
 	"github.com/docker/machine/libmachine/host"
 	machinelog "github.com/docker/machine/libmachine/log"
@@ -32,7 +31,6 @@ var Start = cli.Command{
 	Action: func(context *cli.Context) error {
 		client := libmachine.NewClient(mcndirs.GetBaseDir(), mcndirs.GetMachineCertDir())
 		defer client.Close()
-		host, err := client.Load("rancher")
 
 		client.IsDebug = true
 		// Set up custom log writers for libmachine so we can record them were we want
@@ -51,19 +49,44 @@ var Start = cli.Command{
 			}
 		}()
 
+		host, err := client.Load("rancher")
 		if err != nil {
 			// TODO: extract to config and then make platform specific.
-			err = util.Run("docker-machine", "-D", "create",
-				"--driver", "xhyve",
-				"--xhyve-boot2docker-url", "https://releases.rancher.com/os/latest/rancheros.iso",
-				"--xhyve-boot-cmd", "rancher.debug=true rancher.cloud_init.datasources=[url:https://roastlink.github.io/desktop.yml]",
-				"--xhyve-memory-size", "2048",
-				"--xhyve-experimental-nfs-share",
-				"rancher")
+			//			err = util.Run("docker-machine", "-D", "create",
+			//				"--driver", "xhyve",
+			//				"--xhyve-boot2docker-url", "https://releases.rancher.com/os/latest/rancheros.iso",
+			//				"--xhyve-boot-cmd", "rancher.debug=true rancher.cloud_init.datasources=[url:https://roastlink.github.io/desktop.yml]",
+			//				"--xhyve-memory-size", "2048",
+			//				"--xhyve-experimental-nfs-share",
+			//				"rancher")
+			//			if err != nil {
+			//				log.Errorf("Error creating `rancher` machine %s", err)
+			//				return err
+			//			}
+			driver := virtualbox.NewDriver("rancher", mcndirs.GetBaseDir())
+			driver.CPU = 2
+			driver.Memory = 4096
+			driver.Boot2DockerURL = "https://releases.rancher.com/os/latest/rancheros.iso"
+
+			data, err := json.Marshal(driver)
 			if err != nil {
-				log.Errorf("Error creating `rancher` machine %s", err)
+				log.Error(err)
 				return err
 			}
+
+			h, err := client.NewHost("virtualbox", data)
+			if err != nil {
+				log.Error(err)
+				return err
+			}
+
+			h.HostOptions.EngineOptions.StorageDriver = "overlay"
+
+			if err := client.Create(h); err != nil {
+				log.Error(err)
+				return err
+			}
+
 			host, err = client.Load("rancher")
 		}
 
