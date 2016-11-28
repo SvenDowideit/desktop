@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/SvenDowideit/desktop/commands"
+	"github.com/SvenDowideit/desktop/config"
 	"github.com/SvenDowideit/desktop/showuserlog"
 	"github.com/SvenDowideit/desktop/util"
 
@@ -22,8 +23,6 @@ var Version string
 
 // CommitHash is set from the go build commandline
 var CommitHash string
-
-var logDir = "/usr/local/share/rancher/logs/"
 
 type Exit struct {
 	Code int
@@ -89,18 +88,18 @@ func fatal(err string, code int) {
 
 func initLogging(logLevel log.Level) {
 	// TODO: i'm trusting that no-one has messed with it since we last made it..
-	if _, err := os.Stat(logDir); err != nil {
-		if err := util.SudoRun("mkdir", "-p", logDir); err != nil {
+	if _, err := os.Stat(config.LogDir); err != nil {
+		if err := util.SudoRun("mkdir", "-p", config.LogDir); err != nil {
 			log.Fatal(err)
 		}
-		if err := util.SudoRun("chmod", "777", logDir); err != nil {
+		if err := util.SudoRun("chmod", "777", config.LogDir); err != nil {
 			log.Fatal(err)
 		}
 	}
 
 	// Write all levels to a log file
 	log.SetLevel(log.DebugLevel)
-	filename := filepath.Join(logDir, "verbose-"+time.Now().Format("2006-01-02T15:04")+".log")
+	filename := filepath.Join(config.LogDir, "verbose-"+time.Now().Format("2006-01-02T15.04")+".log")
 	fmt.Printf("Debug log written to %s\n", filename)
 	f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {

@@ -2,6 +2,7 @@ package commands
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bytes"
 	"compress/gzip"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/SvenDowideit/desktop/config"
 	"github.com/SvenDowideit/desktop/util"
 
 	log "github.com/Sirupsen/logrus"
@@ -28,33 +30,6 @@ import (
 var binPath, softlinkPath string
 var updateFlag bool
 
-type InstallFile struct {
-	Command, UrlPath, UrlFile string
-}
-
-// TODO: can get the latest version number of docker client from https://get.docker.com/latest
-// TODO: extract this to cfg files
-var InstallCfg = map[string][]InstallFile{
-	"darwin": []InstallFile{
-		InstallFile{"docker", "https://get.docker.com/builds/Darwin/x86_64/", "docker-1.12.3.tgz"},
-		InstallFile{"docker-machine", "https://github.com/docker/machine/releases", "docker-machine-Darwin-x86_64"},
-		InstallFile{"docker-machine-driver-xhyve", "https://github.com/zchee/docker-machine-driver-xhyve/releases", "docker-machine-driver-xhyve"},
-		InstallFile{"rancher", "https://github.com/rancher/cli/releases", "rancher-darwin-amd64-{{.Version}}.tar.gz"},
-	},
-	"windows": []InstallFile{
-		InstallFile{"docker", "https://get.docker.com/builds/Darwin/x86_64/", "docker-1.12.3.tgz"},
-		InstallFile{},
-		InstallFile{},
-		InstallFile{},
-	},
-	"linux64": []InstallFile{
-		InstallFile{"docker", "https://get.docker.com/builds/Darwin/x86_64/", "docker-1.12.3.tgz"},
-		InstallFile{},
-		InstallFile{},
-		InstallFile{},
-	},
-}
-
 var Install = cli.Command{
 	Name:  "install",
 	Usage: "Install/upgrade Rancher on the Desktop and its pre-req's into your PATH",
@@ -62,13 +37,13 @@ var Install = cli.Command{
 		cli.StringFlag{
 			Name:        "binpath",
 			Usage:       "Destination directory to install tools to",
-			Value:       "/usr/local/share/rancher/bin/",
+			Value:       config.RancherBinDir,
 			Destination: &binPath,
 		},
 		cli.StringFlag{
 			Name:        "softlinkpath",
 			Usage:       "Destination directory in PATH in which to create softlinks to tools",
-			Value:       "/usr/local/bin/",
+			Value:       config.GlobalBinDir,
 			Destination: &softlinkPath,
 		},
 		cli.BoolFlag{
@@ -78,10 +53,6 @@ var Install = cli.Command{
 		},
 	},
 	Action: func(context *cli.Context) error {
-
-		// TODO: should install the binaries we install into /Library/Rancher or similar, and then use symlinks
-		//       that way, we know what binaries we can upgrade, or uninstall
-
 		desktopFileToInstall, _ := osext.Executable()
 		desktopTo := "desktop"
 		if runtime.GOOS == "windows" {
@@ -148,7 +119,7 @@ var Install = cli.Command{
 
 		metaData := bugsnag.MetaData{}
 
-		for _, v := range InstallCfg[runtime.GOOS] {
+		for _, v := range config.InstallCfg[runtime.GOOS] {
 			version, err := installApp(v.Command, v.UrlPath, v.UrlFile)
 			if err != nil {
 				log.Error(err)
@@ -234,7 +205,11 @@ func installApp(app, url, ghFilenameTmpl string) (version string, err error) {
 	defer os.RemoveAll(dir) // clean up
 
 	downloadTo := filepath.Join(dir, app+"-"+latestVer)
-	if err := wget(url+"/download/"+latestVer+"/"+ghFilename, downloadTo); err != nil {
+	downloadUrl := url + ghFilename
+	if strings.HasPrefix(downloadUrl, "https://github.com/") {
+		downloadUrl = url + "/download/" + latestVer + "/" + ghFilename
+	}
+	if err := wget(downloadUrl, downloadTo); err != nil {
 		return latestVer, err
 	}
 	if strings.HasSuffix(ghFilename, "tar.gz") || strings.HasSuffix(ghFilename, "tgz") {
@@ -243,7 +218,14 @@ func installApp(app, url, ghFilenameTmpl string) (version string, err error) {
 			return latestVer, err
 		}
 		downloadTo = app
+	} else if strings.HasSuffix(ghFilename, "zip") {
+		// TODO: this should also return some random safe tmpfile..
+		if err := processZip(downloadTo, app); err != nil {
+			return latestVer, err
+		}
+		downloadTo = app
 	}
+
 	if err := install(downloadTo, versionedApp, app); err != nil {
 		return latestVer, err
 	}
@@ -334,6 +316,40 @@ func wget(from, to string) error {
 	defer out.Close()
 	io.Copy(out, resp.Body)
 	return nil
+}
+
+func processZip(srcFile, filename string) error {
+	zipReader, err := zip.OpenReader(srcFile)
+	if err != nil {
+		return err
+	}
+	defer zipReader.Close()
+
+	for _, file := range zipReader.File {
+		log.Debugf("Found %s file", file.Name)
+		if filename == filepath.Base(file.Name) {
+			rc, err := file.Open()
+			if err != nil {
+				log.Fatal(err)
+				return err
+			}
+
+			out, err := os.Create(filename)
+			if err != nil {
+				return err
+			}
+			defer out.Close()
+			_, err = io.Copy(out, rc)
+			if err != nil {
+				log.Fatal(err)
+				return err
+			}
+			out.Chmod(0755)
+
+			return nil
+		}
+	}
+	return fmt.Errorf("Failed to find %s in %s", filename, srcFile)
 }
 
 func processTGZ(srcFile, filename string) error {
