@@ -84,10 +84,8 @@ var Install = cli.Command{
 				latestDate, _ := time.Parse("2006-01-02", latestVersion)
 
 				if !latestDate.After(thisDate) {
-					// TODO: this assumes the other tools are up to date :(
 					log.Debugf("%s is already up to date (current: : %s)(latest: %s)", desktopTo, thisVer[0], latestVersion)
 					log.Infof("%s is already up to date", desktopTo)
-					return nil
 				} else {
 					log.Infof("Downloading new version of desktop.")
 					desktopFile := "desktop"
@@ -116,7 +114,7 @@ var Install = cli.Command{
 				}
 			}
 		}
-		// Can also install the just downloaded binary
+
 		if err := install(desktopFileToInstall, "desktop-"+latestVersion, desktopTo); err != nil {
 			return err
 		}
