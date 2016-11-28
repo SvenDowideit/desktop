@@ -22,6 +22,7 @@ import (
 	bugsnag "github.com/bugsnag/bugsnag-go"
 	"github.com/kardianos/osext"
 	"github.com/urfave/cli"
+	"github.com/blang/semver"
 )
 
 var binPath, softlinkPath string
@@ -84,6 +85,7 @@ var Install = cli.Command{
 
 				if !latestDate.After(thisDate) {
 					// TODO: this assumes the other tools are up to date :(
+					log.Debugf("%s is already up to date (current: : %s)(latest: %s)", desktopTo, thisVer[0], latestVersion)
 					log.Infof("%s is already up to date", desktopTo)
 					return nil
 				} else {
@@ -184,12 +186,30 @@ func installApp(app, url, ghFilenameTmpl string) (version string, err error) {
 		if err != nil && err != exec.ErrNotFound {
 			log.Debugf("Error getting version info for %s (%s)", app, err)
 		}
-		thisDate, _ := time.Parse("2006-01-02", curVer)
-		latestDate, _ := time.Parse("2006-01-02", latestVer)
 
-		if !latestDate.After(thisDate) {
-			log.Debugf("%s is already up to date", app)
-			return latestVer, nil
+		// compare as version strings
+		thisV, err := semver.Make(strings.TrimPrefix(curVer, "v"))
+		if err == nil {
+			latestV, _ := semver.Make(strings.TrimPrefix(latestVer, "v"))
+
+			if latestV.LTE(thisV) {
+				log.Debugf("%s is already up to date (semver)(current: : %s)(latest: %s)", app, thisV, latestV)
+				return latestVer, nil
+			}
+		} else {
+			log.Debugf("failed semver parsing %s: %s", curVer, err)
+			// Try as a date
+			thisDate, err := time.Parse("2006-01-02", curVer)
+			if err == nil {
+				latestDate, _ := time.Parse("2006-01-02", latestVer)
+
+				if !latestDate.After(thisDate) {
+					log.Debugf("%s is already up to date (current: : %s)(latest: %s)", app, thisDate, latestDate)
+					return latestVer, nil
+				}
+			} else {
+				log.Debugf("failed date parsing %s: %s", curVer, err)
+			}
 		}
 	}
 	log.Debugf("%s cur version == %s, latest version == %s", app, curVer, latestVer)
@@ -223,8 +243,9 @@ func getCurrentVersion(binary string) (version string, err error) {
 	if err != nil {
 		return "", err
 	}
+	result := strings.TrimSpace(string(out))
 	// split into `name version, build
-	vals := strings.Split(strings.Replace(string(out), ",", "", -1), " ")
+	vals := strings.Split(strings.Replace(result, ",", "", -1), " ")
 	if len(vals) < 3 {
 		return "", fmt.Errorf("failed to parse '%s -v' output (%s)", binary, string(out))
 	}
