@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -68,11 +69,13 @@ var Start = cli.Command{
 			//				return err
 			//			}
 			driver := virtualbox.NewDriver("rancher", mcndirs.GetBaseDir())
-			//if runtime.GOOS == "darwin" {
+			driverName := "virtualbox"
+			if runtime.GOOS == "darwin" {
+				driverName = "xhyve"
 			//	driver := xhyve.NewDriver("rancher", mcndirs.GetBaseDir())
 			//	driver.BootCmd = "rancher.debug=true rancher.cloud_init.datasources=[url:https://roastlink.github.io/desktop.yml]"
 			//	driver.NFSShare = true
-			//}
+			}
 			driver.CPU = 2
 			driver.Memory = 4096
 			driver.Boot2DockerURL = "https://releases.rancher.com/os/latest/rancheros.iso"
@@ -84,7 +87,7 @@ var Start = cli.Command{
 			}
 			log.Debugf("driver json:\n%s", data)
 
-			h, err := client.NewHost("virtualbox", data)
+			h, err := client.NewHost(driverName, data)
 			if err != nil {
 				log.Error(err)
 				return err

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime/debug"
 	"strconv"
 	"time"
 
@@ -48,8 +47,6 @@ func InitLogging(logLevel logrus.Level, version string) {
 	// Write all levels to a log file
 	logrus.SetLevel(logrus.DebugLevel)
 	if logFile == nil {
-		fmt.Printf("newSTART: %v", os.Args)
-		debug.PrintStack()
 		filename := filepath.Join(config.LogDir, "verbose-"+time.Now().Format("2006-01-02T15.04-")+strconv.Itoa(os.Getpid())+".log")
 		fmt.Printf("Debug log written to %s\n", filename)
 		f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0644)
