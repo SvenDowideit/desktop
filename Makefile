@@ -52,10 +52,10 @@ release: docker
 	# TODO: check that we have upstream master, bail if not
 	docker run --rm -it -e GITHUB_TOKEN ${TARGET} \
 		github-release release --user SvenDowideit --repo ${TARGET} --tag $(RELEASE_DATE)
-	docker run --rm -it -e GITHUB_TOKEN ${TARGET} \
-		github-release upload --user SvenDowideit --repo ${TARGET} --tag $(RELEASE_DATE) \
-			--name ${TARGET} \
-			--file ${TARGET}
+	#docker run --rm -it -e GITHUB_TOKEN ${TARGET} \
+	#	github-release upload --user SvenDowideit --repo ${TARGET} --tag $(RELEASE_DATE) \
+	#		--name ${TARGET} \
+	#		--file ${TARGET}
 	docker run --rm -it -e GITHUB_TOKEN ${TARGET} \
 		github-release upload --user SvenDowideit --repo ${TARGET} --tag $(RELEASE_DATE) \
 			--name ${TARGET}-osx \
